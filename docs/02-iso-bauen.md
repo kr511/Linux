@@ -13,6 +13,22 @@ scripts/build-iso.sh
 
 Ergebnis: `out/kairo-0.1-JJJJ.MM.TT-x86_64.iso` (grob 1,2 bis 1,5 GB, wie die offizielle Arch-ISO).
 
+## Ohne eigene Arch-Umgebung: in der Cloud bauen
+
+Kein Platz, kein Arch, nur ein Chromebook? Der Workflow
+[`iso.yml`](../.github/workflows/iso.yml) baut die ISO auf GitHub und bootet
+sie dort in QEMU (UEFI und BIOS), inklusive der Prüfungen aus Teil C und D der
+[Checkliste](05-checkliste-kairo-0.1.md).
+
+1. Auf GitHub: **Actions** → **ISO bauen und testen** → **Run workflow**.
+2. Nach ca. 20-30 Minuten im Lauf auf **Summary**: Prüftabellen und Prüfsumme.
+3. Unten bei **Artifacts**: `kairo-iso` (die ISO) und `boot-test-uefi` /
+   `boot-test-bios` (Screenshots vom Bootmenü, Login und fastfetch).
+
+Der Workflow startet auch automatisch bei Pull Requests, die `iso/` oder die
+Build-Skripte ändern. Lokal geht derselbe Boot-Test ohne Fenster mit
+`scripts/boot-test.py out/kairo-*.iso`.
+
 ## Was dabei passiert, Schritt für Schritt
 
 `scripts/build-iso.sh` macht vier Dinge. Du kannst jeden Schritt auch einzeln
