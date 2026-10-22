@@ -1,0 +1,19 @@
+# remove from airootfs!
+#
+# Ersetzt /usr/lib/os-release (gehört dem Paket "filesystem") durch die
+# Kairo-Version. Läuft nur während des ISO-Builds: Die Markierung in der
+# ersten Zeile sorgt dafür, dass der offizielle releng-Hook
+# zzzz99-remove-custom-hooks-from-airootfs.hook diese Datei am Ende wieder
+# löscht. Der Name beginnt mit "k", läuft also vor "zzzz99".
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = filesystem
+
+[Action]
+Description = Setze Kairo-Branding in /usr/lib/os-release...
+When = PostTransaction
+Depends = coreutils
+Exec = /usr/bin/install -m 0644 /usr/local/share/kairo/os-release /usr/lib/os-release
