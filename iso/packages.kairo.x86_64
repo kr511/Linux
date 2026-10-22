@@ -1,0 +1,10 @@
+# Zusätzliche Pakete für Kairo, werden an die releng-Paketliste angehängt.
+# Nur Pakete aus den offiziellen Arch-Repos [core] und [extra].
+# Eine Zeile pro Paket. Zeilen mit # sind Kommentare.
+
+# Zeigt Systeminfos samt Distro-Name an. Praktischer Sichttest fürs Branding:
+# Steht nach dem Boot "Kairo OS" da, hat das os-release-Overlay funktioniert.
+fastfetch
+
+# Versionsverwaltung, um im Live-System direkt dieses Repo klonen zu können.
+git

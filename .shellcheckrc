@@ -1,0 +1,2 @@
+# Relative "source"-Pfade ab dem Ordner des jeweiligen Skripts auflösen
+source-path=SCRIPTDIR

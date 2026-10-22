@@ -1,0 +1,15 @@
+# Build-Ausgaben von Archiso
+/build/
+/out/
+*.iso
+
+# makepkg-Arbeitsverzeichnisse und Pakete
+kernel/linux-kairo/src/
+kernel/linux-kairo/pkg/
+kernel/linux-kairo/linux-*.tar*
+kernel/linux-kairo/*.pkg.tar*
+kernel/linux-kairo/*.log
+
+# Python
+__pycache__/
+*.pyc

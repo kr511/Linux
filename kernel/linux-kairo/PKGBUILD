@@ -1,0 +1,235 @@
+# Maintainer: Kairo OS <https://github.com/kr511/Linux>
+#
+# linux-kairo: unveränderter Upstream-Kernel von kernel.org mit eigener
+# Kairo-Konfiguration. Aufbau angelehnt an das offizielle Arch-PKGBUILD
+# "linux" (https://gitlab.archlinux.org/archlinux/packaging/packages/linux),
+# aber OHNE Arch-Patches und OHNE Doku-Paket.
+#
+# Vor dem ersten Build: siehe kernel/README.md (Basis-Config importieren,
+# Prüfsummen erzeugen).
+
+pkgbase=linux-kairo
+pkgver=7.2.12
+pkgrel=1
+pkgdesc='Linux (Kairo OS)'
+url='https://github.com/kr511/Linux'
+arch=(x86_64)
+license=(GPL-2.0-only)
+makedepends=(
+  bc
+  cpio
+  gettext
+  libelf
+  pahole
+  perl
+  python
+  rust
+  rust-bindgen
+  rust-src
+  tar
+  xz
+)
+# !debug: kein separates Debug-Paket. !strip: Kernel-Module strippt der
+# Kernel-Build selbst (INSTALL_MOD_STRIP), makepkg soll sie nicht anfassen.
+options=(
+  !debug
+  !strip
+)
+_srcname=linux-${pkgver}
+source=(
+  "https://cdn.kernel.org/pub/linux/kernel/v${pkgver%%.*}.x/${_srcname}.tar."{xz,sign}
+  config.arch-base  # komplette Arch-Konfiguration, siehe kernel/README.md
+  kairo.config      # Kairo-Anforderungen (Fragment)
+  verify-config.py  # prüft, dass kairo.config wirklich erfüllt ist
+)
+# Signaturschlüssel. makepkg prüft die .sign-Datei damit.
+# Stable-Releases (x.y.z wie 7.2.12) signiert Greg Kroah-Hartman. Fingerprint
+# abgeglichen mit kernel.org/doc/wot/gregkh.html. Schlüssel vorher importieren:
+#   gpg --locate-keys gregkh@kernel.org
+# Für x.y.0-Releases (signiert von Linus Torvalds) dessen Schlüssel erst selbst
+# per 'gpg --locate-keys torvalds@kernel.org' holen, Fingerprint mit
+# kernel.org/signature.html vergleichen und dann hier eintragen.
+validpgpkeys=(
+  647F28654894E3BD457199BE38DBBDC86092693E  # Greg Kroah-Hartman
+)
+# Platzhalter. Vor dem ersten echten Build mit 'updpkgsums' (Paket
+# pacman-contrib) ersetzen und committen. Die Echtheit des Tarballs ist
+# unabhängig davon über die PGP-Signatur abgesichert.
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
+
+# Feste Build-Metadaten, damit zwei Builds möglichst identisch sind
+export KBUILD_BUILD_HOST=kairo
+export KBUILD_BUILD_USER=$pkgbase
+export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+prepare() {
+  cd $_srcname
+
+  echo "Setting version..."
+  echo "-$pkgrel" > localversion.10
+  echo "${pkgbase#linux}" > localversion.20
+
+  # Platz für spätere Kairo-Patches (kernel/patches/). In 0.1 gibt es keine.
+  local src
+  for src in "${source[@]}"; do
+    src="${src%%::*}"
+    src="${src##*/}"
+    [[ $src = *.patch ]] || continue
+    echo "Applying patch $src..."
+    patch -Np1 < "../$src"
+  done
+
+  echo "Setting config..."
+  cp ../config.arch-base .config
+  # -m: nur zusammenführen, danach löst olddefconfig die Abhängigkeiten auf
+  scripts/kconfig/merge_config.sh -m .config ../kairo.config
+  make olddefconfig
+  diff -u ../config.arch-base .config || :
+
+  echo "Verifying Kairo requirements..."
+  python ../verify-config.py .config ../kairo.config
+
+  make -s kernelrelease > version
+  echo "Prepared $pkgbase version $(<version)"
+}
+
+build() {
+  cd $_srcname
+  make all
+  make -C tools/bpf/bpftool vmlinux.h feature-clang-bpf-co-re=1
+}
+
+_package() {
+  pkgdesc="The $pkgdesc kernel and modules"
+  depends=(
+    coreutils
+    initramfs
+    kmod
+  )
+  optdepends=(
+    'linux-firmware: firmware images needed for some devices (incl. AMDGPU)'
+    'wireless-regdb: to set the correct wireless channels of your country'
+  )
+
+  cd $_srcname
+  local modulesdir="$pkgdir/usr/lib/modules/$(<version)"
+
+  echo "Installing boot image..."
+  # systemd und mkinitcpio erwarten den Kernel hier
+  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+
+  # Name, unter dem mkinitcpio das Initramfs ablegt (initramfs-linux-kairo.img)
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+
+  echo "Installing modules..."
+  ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \
+    DEPMOD=/doesnt/exist modules_install  # depmod läuft später per pacman-Hook
+
+  # Link auf den Build-Ordner entfernen, der gehört ins Headers-Paket
+  rm "$modulesdir"/build
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the $pkgdesc kernel"
+  depends=(pahole)
+
+  cd $_srcname
+  local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
+
+  echo "Installing build files..."
+  install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
+    localversion.* version vmlinux tools/bpf/bpftool/vmlinux.h
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
+  cp -t "$builddir" -a scripts
+  ln -srt "$builddir" "$builddir/scripts/gdb/vmlinux-gdb.py"
+
+  # nötig, wenn objtool aktiv ist (Standard auf x86_64)
+  install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+
+  # nötig, wenn DEBUG_INFO_BTF_MODULES aktiv ist
+  install -Dt "$builddir/tools/bpf/resolve_btfids" tools/bpf/resolve_btfids/resolve_btfids
+
+  echo "Installing headers..."
+  cp -t "$builddir" -a include
+  cp -t "$builddir/arch/x86" -a arch/x86/include
+  install -Dt "$builddir/arch/x86/kernel" -m644 arch/x86/kernel/asm-offsets.s
+
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+
+  # Header, die externe Module (DKMS) erfahrungsgemäß brauchen (wie bei Arch)
+  install -Dt "$builddir/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+  install -Dt "$builddir/drivers/media/usb/dvb-usb" -m644 drivers/media/usb/dvb-usb/*.h
+  install -Dt "$builddir/drivers/media/dvb-frontends" -m644 drivers/media/dvb-frontends/*.h
+  install -Dt "$builddir/drivers/media/tuners" -m644 drivers/media/tuners/*.h
+  install -Dt "$builddir/drivers/iio/common/hid-sensors" -m644 drivers/iio/common/hid-sensors/*.h
+
+  echo "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+
+  # Rust-Dateien gibt es nur, wenn CONFIG_RUST in der Config aktiv ist
+  if compgen -G 'rust/*.rmeta' >/dev/null; then
+    echo "Installing Rust files..."
+    install -Dt "$builddir/rust" -m644 rust/*.rmeta
+    install -Dt "$builddir/rust" rust/*.so
+  fi
+
+  echo "Installing unstripped VDSO..."
+  make INSTALL_MOD_PATH="$pkgdir/usr" vdso_install \
+    link=  # keine build-id-Symlinks
+
+  echo "Removing unneeded architectures..."
+  local arch
+  for arch in "$builddir"/arch/*/; do
+    [[ $arch = */x86/ ]] && continue
+    echo "Removing $(basename "$arch")"
+    rm -r "$arch"
+  done
+
+  echo "Removing documentation..."
+  rm -r "$builddir/Documentation"
+
+  echo "Removing broken symlinks..."
+  find -L "$builddir" -type l -printf 'Removing %P\n' -delete
+
+  echo "Removing loose objects..."
+  find "$builddir" -type f -name '*.o' -printf 'Removing %P\n' -delete
+
+  echo "Stripping build tools..."
+  local file
+  while read -rd '' file; do
+    case "$(file -Sib "$file")" in
+      application/x-sharedlib\;*)      # Bibliotheken (.so)
+        strip -v $STRIP_SHARED "$file" ;;
+      application/x-archive\;*)        # Bibliotheken (.a)
+        strip -v $STRIP_STATIC "$file" ;;
+      application/x-executable\;*)     # Programme
+        strip -v $STRIP_BINARIES "$file" ;;
+      application/x-pie-executable\;*) # verschiebbare Programme
+        strip -v $STRIP_SHARED "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+
+  echo "Stripping vmlinux..."
+  strip -v $STRIP_STATIC "$builddir/vmlinux"
+
+  echo "Adding symlink..."
+  mkdir -p "$pkgdir/usr/src"
+  ln -sr "$builddir" "$pkgdir/usr/src/$pkgbase"
+}
+
+pkgname=(
+  "$pkgbase"
+  "$pkgbase-headers"
+)
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done

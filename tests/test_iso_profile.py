@@ -1,0 +1,152 @@
+"""Tests für das Kairo-ISO-Overlay und scripts/assemble-iso-profile.sh.
+
+Die Assembly-Tests brauchen ein echtes releng-Profil von archiso. Gesucht wird:
+  1. in der Umgebungsvariable KAIRO_RELENG_DIR (so macht es die CI), sonst
+  2. unter /usr/share/archiso/configs/releng (wenn archiso installiert ist).
+Fehlt beides, werden diese Tests übersprungen (nicht als bestanden gezählt).
+"""
+
+import configparser
+import os
+import re
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+ISO = REPO / "iso"
+RELENG = Path(os.environ.get("KAIRO_RELENG_DIR",
+                             "/usr/share/archiso/configs/releng"))
+HAVE_RELENG = (RELENG / "profiledef.sh").is_file()
+
+# Erlaubte Zeichen in Arch-Paketnamen (siehe man PKGBUILD, "pkgname")
+PKGNAME_RE = re.compile(r"^[a-z0-9@_+][a-z0-9@._+-]*$")
+
+
+def read_package_list(path):
+    lines = (l.split("#", 1)[0].strip() for l in path.read_text().splitlines())
+    return [l for l in lines if l]
+
+
+class OverlayFilesTest(unittest.TestCase):
+    """Prüfungen, die nur unsere eigenen Dateien brauchen."""
+
+    def test_paketnamen_gueltig(self):
+        for pkg in read_package_list(ISO / "packages.kairo.x86_64"):
+            with self.subTest(paket=pkg):
+                self.assertRegex(pkg, PKGNAME_RE)
+
+    def test_hostname(self):
+        self.assertEqual((ISO / "airootfs/etc/hostname").read_text().strip(),
+                         "kairo")
+
+    def test_os_release(self):
+        text = (ISO / "airootfs/usr/local/share/kairo/os-release").read_text()
+        values = dict(l.split("=", 1) for l in text.splitlines() if "=" in l)
+        self.assertEqual(values["ID"], "kairo")
+        self.assertEqual(values["ID_LIKE"], "arch")
+        self.assertEqual(values["NAME"], '"Kairo OS"')
+
+    def test_pacman_hook(self):
+        hook = ISO / "airootfs/etc/pacman.d/hooks/kairo-os-release.hook"
+        text = hook.read_text()
+        # Ohne diese Markierung bliebe der Hook im Live-System aktiv
+        self.assertTrue(text.startswith("# remove from airootfs!"))
+        # Muss alphabetisch VOR dem releng-Aufräum-Hook laufen
+        self.assertLess(hook.name, "zzzz99-remove-custom-hooks-from-airootfs.hook")
+        # pacman-Hooks dürfen Schlüssel mehrfach haben (Operation), darum strict=False
+        ini = configparser.ConfigParser(strict=False)
+        ini.read_string(text)
+        self.assertEqual(ini["Trigger"]["Target"], "filesystem")
+        self.assertEqual(ini["Action"]["When"], "PostTransaction")
+        src = ini["Action"]["Exec"].split()[-2]
+        self.assertTrue((ISO / "airootfs" / src.lstrip("/")).is_file(),
+                        f"Hook kopiert {src}, die Datei fehlt im Overlay")
+
+
+@unittest.skipUnless(HAVE_RELENG, f"kein releng-Profil unter {RELENG}")
+class AssembledProfileTest(unittest.TestCase):
+    """Baut das Profil wirklich zusammen und prüft das Ergebnis."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.out = Path(cls.tmp.name) / "profile"
+        subprocess.run(
+            [str(REPO / "scripts/assemble-iso-profile.sh"),
+             "--base", str(RELENG), "--out", str(cls.out)],
+            check=True, capture_output=True, text=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def profiledef(self, *names):
+        """Liest profiledef.sh so ein, wie mkarchiso es tut (per bash source)."""
+        script = ("declare -A file_permissions; source profiledef.sh; "
+                  + "; ".join(f'printf "%s\\n" "${{{n}}}"' for n in names))
+        result = subprocess.run(["bash", "-c", script], cwd=self.out,
+                                check=True, capture_output=True, text=True)
+        return result.stdout.splitlines()
+
+    def test_iso_metadaten(self):
+        name, label, version, app = self.profiledef(
+            "iso_name", "iso_label", "iso_version", "iso_application")
+        self.assertEqual(name, "kairo")
+        self.assertRegex(label, r"^KAIRO_\d{6}$")
+        self.assertLessEqual(len(label), 32)
+        self.assertRegex(version, r"^0\.1-\d{4}\.\d{2}\.\d{2}$")
+        self.assertEqual(app, "Kairo OS Live")
+
+    def test_bootmodi_von_releng_geerbt(self):
+        (ours,) = self.profiledef("bootmodes[*]")
+        result = subprocess.run(
+            ["bash", "-c", "declare -A file_permissions; source profiledef.sh; "
+                           'printf "%s\\n" "${bootmodes[*]}"'],
+            cwd=RELENG, check=True, capture_output=True, text=True)
+        self.assertEqual(ours, result.stdout.strip())
+        self.assertIn("uefi", ours)
+
+    def test_paketliste(self):
+        pkgs = (self.out / "packages.x86_64").read_text().split()
+        self.assertEqual(len(pkgs), len(set(pkgs)), "doppelte Pakete")
+        for pkg in ["linux", "base", "mkinitcpio-archiso", "amd-ucode",
+                    "linux-firmware", *read_package_list(ISO / "packages.kairo.x86_64")]:
+            with self.subTest(paket=pkg):
+                self.assertIn(pkg, pkgs)
+        # Kein eigener Kernel in 0.1, erst nach separatem Boot-Test
+        self.assertNotIn("linux-kairo", pkgs)
+
+    def test_bootmenue_umbenannt(self):
+        for sub in ["efiboot", "syslinux", "grub"]:
+            for f in (self.out / sub).rglob("*"):
+                if f.suffix in {".conf", ".cfg"}:
+                    with self.subTest(datei=str(f.relative_to(self.out))):
+                        self.assertNotIn("Arch Linux install medium", f.read_text())
+        entry = next((self.out / "efiboot/loader/entries").glob("01-*.conf"))
+        self.assertIn("Kairo OS Live", entry.read_text())
+
+    def test_overlay_dateien_vorhanden(self):
+        self.assertEqual((self.out / "airootfs/etc/hostname").read_text().strip(),
+                         "kairo")
+        self.assertTrue((self.out / "airootfs/etc/pacman.d/hooks/"
+                         "kairo-os-release.hook").is_file())
+
+    def test_releng_original_unveraendert(self):
+        """Das Skript darf das Upstream-Profil nur lesen, nie ändern."""
+        self.assertIn('iso_name="archlinux"', (RELENG / "profiledef.sh").read_text())
+
+    def test_verweigert_fremden_nichtleeren_ordner(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "wichtig.txt").write_text("nicht löschen")
+            result = subprocess.run(
+                [str(REPO / "scripts/assemble-iso-profile.sh"),
+                 "--base", str(RELENG), "--out", d],
+                capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue((Path(d) / "wichtig.txt").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

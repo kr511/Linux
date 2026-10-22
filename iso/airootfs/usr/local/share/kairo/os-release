@@ -1,0 +1,10 @@
+NAME="Kairo OS"
+PRETTY_NAME="Kairo OS"
+ID=kairo
+ID_LIKE=arch
+BUILD_ID=rolling
+VERSION_ID=0.1
+ANSI_COLOR="38;2;23;147;209"
+HOME_URL="https://github.com/kr511/Linux"
+DOCUMENTATION_URL="https://github.com/kr511/Linux/tree/main/docs"
+BUG_REPORT_URL="https://github.com/kr511/Linux/issues"
