@@ -56,6 +56,10 @@ jobs:
               # unshare --map-auto braucht Bereiche für Unter-UIDs/-GIDs
               grep -q "^builder:" /etc/subuid || echo "builder:100000:65536" >> /etc/subuid
               grep -q "^builder:" /etc/subgid || echo "builder:100000:65536" >> /etc/subgid
+              # Im Docker-Image fehlen die Datei-Capabilities aus dem Paket
+              # shadow ("newuidmap: Could not set caps"), also neu setzen
+              setcap cap_setuid=ep /usr/bin/newuidmap
+              setcap cap_setgid=ep /usr/bin/newgidmap
               chown -R builder /repo
               echo "::group::scripts/check-env.sh (RAM/KVM fehlen im Container, nur zur Info)"
               su builder -c "scripts/check-env.sh" || true
