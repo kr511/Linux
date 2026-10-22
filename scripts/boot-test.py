@@ -40,11 +40,13 @@ OVMF_CANDIDATES = [
 
 # Dieser Befehl wird im Live-System eingetippt. Alles landet zusätzlich auf
 # /dev/ttyS0, das QEMU in serial.log schreibt. Muss eine Zeile bleiben.
+# Die Live-Shell ist zsh: Dort ist ein Wort mit "=" am Anfang eine Pfadsuche
+# ("zsh: ==BEGIN not found"), darum die Markierungen in Anführungszeichen.
 CHECK_CMD = (
-    "export SYSTEMD_PAGER=; { echo ===BEGIN; whoami; cat /etc/hostname; "
+    "export SYSTEMD_PAGER=; { echo '===BEGIN'; whoami; cat /etc/hostname; "
     "cat /etc/motd; cat /etc/os-release; hostnamectl; bootctl status; "
     "echo HOOKS: $(ls /etc/pacman.d/hooks/); ping -c 3 -w 60 archlinux.org; "
-    "fastfetch --pipe --logo none; echo ===END; } 2>&1 | tee /dev/ttyS0"
+    "fastfetch --pipe --logo none; echo '===END'; } 2>&1 | tee /dev/ttyS0"
 )
 
 # Tastenbelegung US (Standard im Live-System): Zeichen -> QEMU-Tastencode
