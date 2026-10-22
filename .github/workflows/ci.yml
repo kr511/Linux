@@ -1,0 +1,76 @@
+# Kairo CI: nur statische, nichtprivilegierte Prüfungen.
+#
+# - keine Secrets, nur Lesezugriff aufs Repo
+# - kein "docker --privileged", kein Mounten, kein Loop-Device
+# - es wird KEINE ISO und KEIN Kernel gebaut (das passiert lokal, siehe docs/)
+#
+# Actions sind auf Commit-Hashes gepinnt: Ein Tag wie "v7" kann nachträglich
+# auf anderen Code zeigen, ein Hash nicht.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # Muss zu iso/base.conf (KAIRO_ARCHISO_VERSION) passen
+  ARCHISO_TAG: v91
+
+jobs:
+  tests:
+    name: Lint + Tests (ISO-Profil, PKGBUILD)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: shellcheck in fester Version installieren
+        run: |
+          pip install --user shellcheck-py==0.11.0.1
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Offizielles archiso-Profil holen (GitHub-Spiegel von archlinux.org)
+        run: git clone --depth 1 --branch "$ARCHISO_TAG" https://github.com/archlinux/archiso.git "$RUNNER_TEMP/archiso"
+
+      - name: Tests
+        env:
+          KAIRO_RELENG_DIR: ${{ runner.temp }}/archiso/configs/releng
+        run: tests/run-all.sh
+
+  kernel-config:
+    name: Kairo-Kernel-Optionen gegen echten Kernel-Quellcode
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Werkzeuge für "make defconfig" installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq flex bison bc
+
+      - name: Kernel-Quellcode passend zu pkgver holen (Stable-Spiegel)
+        run: |
+          ver="$(sed -n 's/^pkgver=//p' kernel/linux-kairo/PKGBUILD)"
+          git clone --depth 1 --branch "v$ver" https://github.com/gregkh/linux.git "$RUNNER_TEMP/linux"
+
+      - name: Fragment prüfen
+        env:
+          KAIRO_KERNEL_SRC: ${{ runner.temp }}/linux
+        run: python3 -m unittest -v tests.test_kernel_package
+
+  makepkg:
+    name: PKGBUILD mit echtem makepkg einlesen (Arch-Container)
+    runs-on: ubuntu-24.04
+    # Normaler, NICHT privilegierter Container mit dem offiziellen Arch-Image
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: makepkg --printsrcinfo als normaler Benutzer
+        run: |
+          useradd -m builder
+          cp -r kernel/linux-kairo /home/builder/
+          chown -R builder /home/builder/linux-kairo
+          su builder -c 'cd ~/linux-kairo && makepkg --printsrcinfo'
