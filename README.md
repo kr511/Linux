@@ -27,7 +27,8 @@ und eine von Omarchy/Hyprland inspirierte Desktopumgebung.
 2. Richte die Build-Umgebung ein: [`docs/01-entwicklungsumgebung.md`](docs/01-entwicklungsumgebung.md).
 3. Baue die ISO: [`docs/02-iso-bauen.md`](docs/02-iso-bauen.md).
 4. Teste sie in QEMU: [`docs/03-iso-in-qemu-testen.md`](docs/03-iso-in-qemu-testen.md).
-5. Hake die Checkliste ab: [`docs/05-checkliste-kairo-0.1.md`](docs/05-checkliste-kairo-0.1.md).
+5. Hake die Checkliste ab: [`docs/05-checkliste-kairo-0.1.md`](docs/05-checkliste-kairo-0.1.md). **Damit ist Kairo 0.1 fertig.**
+6. Danach (Kairo 0.2) der eigene Kernel: [`docs/04-kernel-bauen.md`](docs/04-kernel-bauen.md).
 
 ## Grundregeln
 
