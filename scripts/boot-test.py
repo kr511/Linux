@@ -45,7 +45,8 @@ OVMF_CANDIDATES = [
 CHECK_CMD = (
     "export SYSTEMD_PAGER=; { echo '===BEGIN'; whoami; cat /etc/hostname; "
     "cat /etc/motd; cat /etc/os-release; hostnamectl; bootctl status; "
-    "echo HOOKS: $(ls /etc/pacman.d/hooks/); ping -c 3 -w 60 archlinux.org; "
+    "echo HOOKS: $(ls /etc/pacman.d/hooks/); ping -c 3 -w 20 archlinux.org; "
+    "curl -sSI -m 30 https://archlinux.org | head -1; "
     "fastfetch --pipe --logo none; echo '===END'; } 2>&1 | tee /dev/ttyS0"
 )
 
@@ -149,7 +150,11 @@ def evaluate(output, boot, powered_off):
         ("os-release: IMAGE_VERSION=0.1-<datum>", has(r"^IMAGE_VERSION=\"?0\.1-\d{4}\.\d\d\.\d\d")),
         ("hostnamectl: Static hostname: kairo", has(r"Static hostname: kairo\b")),
         ("hostnamectl: Operating System: Kairo OS", has(r"Operating System: Kairo OS")),
-        ("ping archlinux.org bekommt Antworten", has(r"\b[1-9]\d* received")),
+        # GitHub-Runner (Azure) lassen kein ICMP nach außen durch, ping bekommt
+        # dort nie Antworten. Darum zählt auch eine HTTPS-Antwort von
+        # archlinux.org als "Netzwerk geht".
+        ("Netzwerk: archlinux.org antwortet (ping oder HTTPS)",
+         has(r"\b[1-9]\d* received") or has(r"^HTTP/\S+ [23]\d\d")),
         ('fastfetch zeigt "Kairo OS"', has(r"OS: Kairo OS")),
         ("kairo-os-release.hook wurde aus dem Live-System entfernt",
          hooks is not None and "kairo-os-release.hook" not in hooks.group(1)),

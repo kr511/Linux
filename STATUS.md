@@ -11,8 +11,8 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | --- | --- | --- |
 | Statische Tests (`tests/run-all.sh`) | 🟩 | 27 Tests, shellcheck; lokal bestanden |
 | ISO-Profil-Assembly | 🟩 | Gegen echtes releng aus archiso v91 zusammengebaut und geprüft |
-| ISO-Build mit `mkarchiso` | 🟨 | **Nie ausgeführt** (Arch-Mirrors in der Entwicklungsumgebung gesperrt) |
-| ISO bootet in QEMU (UEFI/BIOS) | ⬜ | |
+| ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 91, siehe Protokoll |
+| ISO bootet in QEMU (UEFI/BIOS) | 🟩 | Automatisch per `scripts/boot-test.py`: UEFI 12/13, BIOS 11/12, offen nur ping (siehe Protokoll) |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
@@ -30,6 +30,28 @@ Neue Einträge oben anfügen. Format:
 - Befehl: <exakt>
 - Ergebnis: <bestanden / fehlgeschlagen + Fehlermeldung>
 ```
+
+### 2026-10-22: Erster ISO-Build und Boot-Test (GitHub Actions)
+
+- Umgebung: GitHub Actions ubuntu-24.04, Build in `archlinux:latest`
+  (privilegierter Docker-Container, Build als normaler Benutzer),
+  archiso 91-1, QEMU 8.2 mit KVM, OVMF aus Ubuntu
+- Befehl: Workflow `.github/workflows/iso.yml`, Lauf 39825569740
+  (`scripts/build-iso.sh`, danach `scripts/boot-test.py [--bios]`)
+- Ergebnis Build: bestanden, `kairo-0.1-2026.10.22-x86_64.iso`,
+  SHA-256 `808bf8f01eb87914973c4de1d47f25be5bb3dacf72a1b196400f305f48617e3b`
+- Ergebnis UEFI: Bootmenü "Kairo OS Live (x86_64, UEFI)", Login `root@kairo`,
+  Begrüßung, os-release (`NAME="Kairo OS"`, `ID=kairo`, `ID_LIKE=arch`,
+  `IMAGE_VERSION=0.1-2026.10.22`), hostnamectl, `Firmware: UEFI`, fastfetch
+  "Kairo OS", Hook entfernt, sauberes poweroff: bestanden
+- Ergebnis BIOS: Bootmenü "Kairo OS Live (x86_64, BIOS)", sonst wie UEFI:
+  bestanden
+- **Fehlgeschlagen:** `ping -c 3 archlinux.org`, 0 Antworten. DNS-Auflösung
+  klappt (209.126.35.79), GitHub-Runner blocken aber ICMP nach außen. Ab jetzt
+  prüft der Test zusätzlich per HTTPS. Ein echter ping-Test steht noch aus
+  (lokale VM).
+- Nebenbefund: Im BIOS-Bootmenü steht noch das Arch-Logo als Hintergrund
+  (nicht Teil von 0.1).
 
 ### 2026-10-22: Phase-1-Grundlage (Cloud-Entwicklungsumgebung)
 
