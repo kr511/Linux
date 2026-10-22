@@ -49,7 +49,8 @@ jobs:
 
       - name: ISO bauen
         run: |
-          docker run --rm --privileged -v "$PWD:/repo" -w /repo archlinux:latest \
+          docker run --rm --privileged -v "$PWD:/repo" -w /repo \
+            -e HOST_IDS="$(id -u):$(id -g)" archlinux:latest \
             bash -euo pipefail -c '
               pacman -Syu --noconfirm --needed archiso git python
               useradd -m builder
@@ -66,6 +67,9 @@ jobs:
               echo "::endgroup::"
               pacman -Q archiso
               su builder -c "scripts/build-iso.sh"
+              # Dateien zurück an den Runner-Benutzer, sonst darf der nächste
+              # Schritt nicht in out/ schreiben
+              chown -R "$HOST_IDS" /repo
             '
 
       - name: Prüfsumme
