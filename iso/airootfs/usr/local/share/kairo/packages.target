@@ -68,6 +68,6 @@ steam
 discord
 # Für die Web-Apps Claude und ChatGPT (eigenes Fenster ohne Browserleiste)
 chromium
-# Für Claude Code (KI-Assistent im Terminal)
+# Für Claude Code und Codex (KI-Assistenten im Terminal)
 nodejs
 npm
