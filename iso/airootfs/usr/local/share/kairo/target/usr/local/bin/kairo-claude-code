@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#
+# Installiert oder aktualisiert Claude Code (npm) und prüft, ob "claude"
+# wirklich startet. Benutzt von kairo-firstboot und kairo-update-root.
+#
+# Warum nicht nur "npm install -g"? Claude Code legt das eigentliche
+# Programm erst in seinem postinstall-Skript (install.cjs) an. npm 12 führt
+# bei globalen Paketen keine Installationsskripte mehr aus, dann bleibt nur
+# ein Platzhalter ("claude native binary not installed"). In dem Fall
+# starten wir genau dieses Skript des Pakets selbst.
+
+set -euo pipefail
+
+npm install --global @anthropic-ai/claude-code@latest
+
+if ! claude --version >/dev/null 2>&1; then
+    echo "==> Claude Code: Programm fehlt, führe das Installationsskript des Pakets aus"
+    cd "$(npm root --global)/@anthropic-ai/claude-code"
+    node install.cjs
+fi
+claude --version

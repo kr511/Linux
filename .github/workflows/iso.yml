@@ -128,7 +128,15 @@ jobs:
           df -h /
 
       - name: QEMU und UEFI-Firmware installieren
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 ovmf
+        # Ubuntu-Mirrors hängen manchmal: Zeitlimit pro Versuch, drei Versuche
+        run: |
+          for try in 1 2 3; do
+            timeout 300 sudo apt-get update -qq \
+              && timeout 600 sudo apt-get install -y -qq qemu-system-x86 ovmf && exit 0
+            echo "apt-get fehlgeschlagen (Versuch ${try}), nochmal"
+            sleep 20
+          done
+          exit 1
 
       # GitHub-VMs haben /dev/kvm, aber nur für root. So läuft die VM schnell.
       - name: KVM freigeben
