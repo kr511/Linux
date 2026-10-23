@@ -442,17 +442,26 @@ def run_install(args, tmp):
         vm.qmp.screenshot(args.out / "install-4-bootmenue.png")
         time.sleep(6)
         vm.qmp.screenshot(args.out / "install-4-boot-animation.png")
-        if wait_for(serial2, "===SELFTEST_END", args.install_timeout):
+        # "Shell>": Die Firmware hat keinen Starteintrag gefunden und ist in
+        # der EFI-Shell gelandet. Dann sofort abbrechen statt 90 Minuten warten
+        result = wait_for(serial2, ["===SELFTEST_END", "Shell> "], args.install_timeout)
+        if result == "===SELFTEST_END":
             vm.qmp.screenshot(args.out / "install-5-anmeldung.png")
         else:
-            vm.qmp.screenshot(args.out / "install-5-timeout.png")
-            log("FEHLER: Selbsttest nicht rechtzeitig fertig")
-        if not vm.wait_exit(600):
+            vm.qmp.screenshot(args.out / "install-5-fehler.png")
+            log("FEHLER: Kairo startet nicht von der Festplatte (EFI-Shell)" if result
+                else "FEHLER: Selbsttest nicht rechtzeitig fertig")
+        if result == "===SELFTEST_END" and not vm.wait_exit(600):
             log("FEHLER: Kein Neustart nach dem Zurückrollen")
     finally:
         vm.kill()
 
     # --- Phase 3: nach dem Zurückrollen ---------------------------------------
+    if result != "===SELFTEST_END":
+        write_summary(args.out, title, evaluate_install(
+            True, section(serial2, "===SELFTEST_BEGIN", "===SELFTEST_END"), "", False, args.encrypt))
+        return False
+
     serial3 = args.out / "serial-nach-rollback.log"
     log("Starte Kairo nach dem Zurückrollen")
     vm = Vm(tmp, serial3, disk=disk)

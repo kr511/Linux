@@ -419,6 +419,17 @@ done
 snapper --no-dbus -c root create -t single -c important -d "Kairo frisch installiert"
 CHROOT
 
+# Starteintrag in der UEFI-Firmware. Das muss HIER passieren, nicht im chroot:
+# Dort überspringt bootctl das ("Not booted with EFI or running in a
+# container"), und die Firmware würde Kairo hinter PXE und EFI-Shell einreihen.
+info "Trage Kairo als ersten Starteintrag in die UEFI-Firmware ein"
+while read -r old_entry; do
+    efibootmgr --quiet --bootnum "${old_entry}" --delete-bootnum
+done < <(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} Kairo OS\b.*/\1/p')
+efibootmgr --quiet --create --disk "${disk}" --part 1 --label "Kairo OS" \
+    --loader '\EFI\systemd\systemd-bootx64.efi'
+efibootmgr | grep -E '^(BootOrder|Boot[0-9A-Fa-f]{4}\*? Kairo OS)'
+
 # --- 9. Fertig -----------------------------------------------------------------------
 
 progress 98
