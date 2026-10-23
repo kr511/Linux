@@ -50,6 +50,17 @@ noto-fonts-emoji
 noto-fonts-cjk
 ttf-liberation
 
+# --- Snapshots, Verschlüsselung, Boot-Animation, Kairo-Apps -------------------------
+btrfs-progs
+snapper
+# Snapshot vor und nach jedem pacman-Lauf
+snap-pac
+cryptsetup
+plymouth
+# Fenster und Benachrichtigungen für Kairo Update / Wiederherstellen
+zenity
+libnotify
+
 # --- Optimierung -------------------------------------------------------------------
 # Komprimierter Arbeitsspeicher als Swap (statt Swap-Datei)
 zram-generator
@@ -68,6 +79,8 @@ steam
 discord
 # Für die Web-Apps Claude und ChatGPT (eigenes Fenster ohne Browserleiste)
 chromium
-# Für Claude Code und Codex (KI-Assistenten im Terminal)
+# KI-Assistenten im Terminal: Codex (offizielles Arch-Paket, wird mit dem
+# System aktualisiert) und Claude Code (nur über npm, siehe kairo-firstboot)
+openai-codex
 nodejs
 npm

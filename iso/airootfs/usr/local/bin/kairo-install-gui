@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#
+# kairo-install-gui: Kairo installieren mit Fenstern statt Terminal-Fragen.
+#
+# Fragt alles per zenity ab und startet dann kairo-install ohne Rückfragen
+# (als root über sudo, der Live-Benutzer darf das ohne Passwort).
+# Passwörter gehen über Dateien in $XDG_RUNTIME_DIR (nur für dich lesbar),
+# nie über die Befehlszeile. kairo-install löscht sie nach dem Lesen.
+
+set -uo pipefail
+
+title="Kairo installieren"
+icon=kairo-logo
+w=480
+
+error() { zenity --error --title="${title}" --width="${w}" --text="$1"; }
+
+# --- Willkommen ------------------------------------------------------------------
+
+zenity --question --title="${title}" --icon="${icon}" --width="${w}" \
+    --ok-label="Weiter" --cancel-label="Abbrechen" \
+    --text="<big><b>Kairo OS installieren</b></big>\n\nKairo bekommt eine <b>ganze Festplatte</b>. Alles, was darauf ist (auch Windows), wird gelöscht.\n\nDu brauchst Internet: Kairo lädt bei der Installation etwa 3 GB herunter." \
+    || exit 0
+
+# --- Internet --------------------------------------------------------------------
+
+until curl -sI --max-time 10 https://geo.mirror.pkgbuild.com >/dev/null; do
+    zenity --question --title="${title}" --width="${w}" \
+        --ok-label="Nochmal prüfen" --cancel-label="Abbrechen" \
+        --text="<b>Kein Internet.</b>\n\nBitte oben rechts auf das Netzwerk-Symbol klicken und WLAN verbinden, oder ein LAN-Kabel einstecken." \
+        || exit 0
+done
+
+# --- Festplatte ------------------------------------------------------------------
+
+mapfile -t disks < <(sudo /usr/local/bin/kairo-install --list-disks)
+if (( ${#disks[@]} == 0 )); then
+    error "Keine Festplatte gefunden, auf die Kairo installiert werden kann."
+    exit 1
+fi
+rows=()
+for d in "${disks[@]}"; do
+    IFS=$'\t' read -r dev size model <<<"${d}"
+    rows+=(FALSE "${dev}" "${size} GiB" "${model:-unbekannt}")
+done
+rows[0]=TRUE
+disk="$(zenity --list --radiolist --title="${title}" --width=620 --height=360 \
+    --text="Auf welche Festplatte soll Kairo? <b>Sie wird komplett gelöscht.</b>\n(Der USB-Stick, von dem Kairo läuft, steht nicht in der Liste.)" \
+    --column="" --column="Gerät" --column="Größe" --column="Modell" \
+    --print-column=2 --ok-label="Weiter" "${rows[@]}")" || exit 0
+[[ -n "${disk}" ]] || exit 0
+
+# --- Benutzer ---------------------------------------------------------------------
+
+while true; do
+    user="$(zenity --entry --title="${title}" --width="${w}" \
+        --text="Benutzername (nur Kleinbuchstaben, Ziffern, - und _), z. B. <b>elias</b>:")" || exit 0
+    [[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${user}" != root ]] && break
+    error "\"${user}\" geht nicht. Nur Kleinbuchstaben, Ziffern, - und _, am Anfang ein Buchstabe."
+done
+
+# ask_password <Text> <Mindestlänge>: Formular mit zwei Feldern
+ask_password() {
+    local out p1 p2
+    while true; do
+        out="$(zenity --forms --title="${title}" --width="${w}" --text="$1" \
+            --add-password="Passwort" --add-password="Wiederholen" --separator=$'\x1f')" || return 1
+        p1="${out%%$'\x1f'*}" p2="${out#*$'\x1f'}"
+        if (( ${#p1} < $2 )); then error "Mindestens $2 Zeichen, bitte nochmal."; continue; fi
+        if [[ "${p1}" != "${p2}" ]]; then error "Die Passwörter sind nicht gleich."; continue; fi
+        printf '%s' "${p1}"
+        return 0
+    done
+}
+
+password="$(ask_password "Passwort für <b>${user}</b> (Anmelden und Administrator):" 1)" || exit 0
+
+# --- Verschlüsselung -----------------------------------------------------------------
+
+encrypt=""
+crypt_password=""
+if zenity --question --title="${title}" --width="${w}" \
+    --ok-label="Verschlüsseln" --cancel-label="Nicht verschlüsseln" \
+    --text="<b>Festplatte verschlüsseln?</b>\n\nDann fragt Kairo bei jedem Start nach einem Passwort. Wird der PC gestohlen, kommt niemand an deine Daten.\n\n<b>Vergisst du das Passwort, sind alle Daten weg.</b>"; then
+    encrypt=1
+    crypt_password="$(ask_password "Passwort für die Verschlüsselung (mindestens 8 Zeichen). Wird bei jedem Start abgefragt:" 8)" || exit 0
+fi
+
+# --- Bestätigung --------------------------------------------------------------------
+
+model="$(lsblk -dno MODEL "${disk}" 2>/dev/null)"
+answer="$(zenity --entry --title="${title}" --width=520 --ok-label="Installieren" \
+    --text="<b>Zusammenfassung</b>\n\nFestplatte: <b>${disk}</b> ${model}\nBenutzer: ${user}\nVerschlüsselung: $([[ -n "${encrypt}" ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\n<span foreground=\"#e5534b\"><b>ALLE DATEN AUF ${disk} WERDEN GELÖSCHT.</b></span>\n\nZum Fortfahren <b>LÖSCHEN</b> eintippen:")" || exit 0
+if [[ "${answer}" != "LÖSCHEN" && "${answer}" != "LOESCHEN" ]]; then
+    zenity --info --title="${title}" --width="${w}" --text="Abgebrochen, nichts wurde verändert."
+    exit 0
+fi
+
+# --- Installation -----------------------------------------------------------------
+
+runtime="${XDG_RUNTIME_DIR:-/tmp}"
+pw_file="$(mktemp -p "${runtime}" kairo-pw.XXXXXX)"
+printf '%s' "${password}" > "${pw_file}"
+env_args=(KAIRO_DISK="${disk}" KAIRO_USER="${user}" KAIRO_YES=1 KAIRO_PASSWORD_FILE="${pw_file}")
+if [[ -n "${encrypt}" ]]; then
+    crypt_file="$(mktemp -p "${runtime}" kairo-crypt.XXXXXX)"
+    printf '%s' "${crypt_password}" > "${crypt_file}"
+    env_args+=(KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD_FILE="${crypt_file}")
+fi
+unset password crypt_password
+
+# Ausgabe: "# Text" setzt die Beschriftung, Zahlen den Fortschritt
+sudo env "${env_args[@]}" /usr/local/bin/kairo-install 2>&1 \
+    | sed -u -n -e 's/^.*==> \(.*\)$/# \1/p' -e 's/^@@PROGRESS \([0-9]*\)$/\1/p' \
+    | sed -u 's/\x1b\[[0-9;]*m//g' \
+    | zenity --progress --title="${title}" --width=520 --no-cancel --auto-close \
+        --text="Starte Installation ..."
+status="${PIPESTATUS[0]}"
+rm -f -- "${pw_file}" "${crypt_file:-}" 2>/dev/null
+
+if (( status == 0 )); then
+    zenity --question --title="${title}" --icon="${icon}" --width="${w}" \
+        --ok-label="Jetzt neu starten" --cancel-label="Später" \
+        --text="<big><b>Kairo ist installiert.</b></big>\n\nZiehe nach dem Herunterfahren den USB-Stick ab.$([[ -n "${encrypt}" ]] && printf '\\nBeim Start fragt Kairo nach dem Verschlüsselungs-Passwort.')\n\nBeim ersten Start lädt Kairo im Hintergrund Roblox, Spotify, VS Code, Claude Code und Codex nach." \
+        && systemctl reboot
+else
+    zenity --text-info --title="${title}: Fehler" --width=760 --height=480 \
+        --filename=/tmp/kairo-install.log \
+        --ok-label="Schließen"
+    exit 1
+fi

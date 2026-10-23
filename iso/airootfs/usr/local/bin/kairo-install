@@ -6,19 +6,28 @@
 #
 # Was installiert wird:
 #   GNOME, linux-zen, AMD-Treiber (Mesa/Vulkan inkl. 32 Bit), Steam, Discord,
-#   Firefox, Web-Apps Claude/ChatGPT, beim ersten Start per Flatpak:
-#   Roblox (Sober), Spotify, VS Code, dazu Claude Code und Codex (Terminal).
+#   Firefox, Web-Apps Claude/ChatGPT, Kairo-Update, Kairo-Wiederherstellen,
+#   beim ersten Start per Flatpak: Roblox (Sober), Spotify, VS Code,
+#   dazu Claude Code und Codex (Terminal).
 #   Paketlisten: /usr/local/share/kairo/packages.target, flatpaks.target
 #
 # Aufbau der Festplatte:
-#   1  1 GiB  EFI-Partition (FAT32, /boot, Bootloader systemd-boot)
-#   2  Rest   Kairo (ext4, /)
+#   1  2 GiB  EFI-Partition (FAT32, /boot: Bootloader, Kernel)
+#   2  Rest   Kairo: Btrfs, optional verschlüsselt (LUKS2)
+#             Subvolumes: @ (/), @home, @snapshots (/.snapshots),
+#             @var_log, @pkg (/var/cache/pacman/pkg)
+#   Vor jedem Update macht snap-pac einen Snapshot von @, zurück geht es
+#   mit "Kairo Wiederherstellen" bzw. kairo-rollback.
 #
 # Aufruf (als root, im Live-System):
-#   kairo-install
+#   kairo-install                 Fragen im Terminal
+#   kairo-install-gui             dasselbe mit Fenstern (ruft dieses Skript)
+#   kairo-install --list-disks    wählbare Festplatten (für die GUI)
 #
-# Ohne Rückfragen (nur für automatische Tests):
-#   KAIRO_DISK=/dev/vda KAIRO_USER=name KAIRO_PASSWORD=pw KAIRO_YES=1 kairo-install
+# Ohne Rückfragen (GUI und automatische Tests):
+#   KAIRO_DISK=/dev/vda KAIRO_USER=name KAIRO_YES=1
+#   KAIRO_PASSWORD=pw  oder  KAIRO_PASSWORD_FILE=/pfad   (Datei wird gelöscht)
+#   KAIRO_ENCRYPT=1 und KAIRO_CRYPT_PASSWORD / KAIRO_CRYPT_PASSWORD_FILE
 #   KAIRO_SELFTEST=1 installiert zusätzlich den Selbsttest (schaltet sich nach
 #   dem ersten Start selbst aus). NIE auf einem echten PC benutzen.
 
@@ -27,20 +36,56 @@ set -euo pipefail
 share=/usr/local/share/kairo
 mnt=/mnt
 min_gib=32
+crypt_name=kairo-root
+# Btrfs: zstd-Kompression spart Platz und schont die SSD
+btrfs_opts=noatime,compress=zstd:1
 
 bold=$'\e[1m' red=$'\e[1;31m' green=$'\e[1;32m' off=$'\e[0m'
 die()  { printf '\n%sFEHLER:%s %s\n' "${red}" "${off}" "$*" >&2; exit 1; }
 info() { printf '\n%s==> %s%s\n' "${bold}" "$*" "${off}"; }
+# Fortschritt für kairo-install-gui (Zahl 0-100), im Terminal unauffällig
+progress() { printf '@@PROGRESS %d\n' "$1"; }
 
 # Liest eine Liste (Kommentare und Leerzeilen weg)
 read_list() { sed -e 's/#.*//' -e 's/[[:space:]]//g' "$1" | awk NF; }
+
+# Liest ein Geheimnis aus einer Datei und löscht die Datei danach
+read_secret_file() {
+    local value
+    value="$(cat -- "$1")"
+    shred -u -- "$1" 2>/dev/null || rm -f -- "$1"
+    printf '%s' "${value}"
+}
+
+# Festplatten, auf die installiert werden darf: keine CDs, kein zram/loop,
+# und nie der USB-Stick, von dem Kairo gerade läuft
+list_disks() {
+    local live_dev live_disk=""
+    live_dev="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
+    if [[ -n "${live_dev}" ]]; then
+        live_disk="/dev/$(lsblk -no PKNAME "${live_dev}" 2>/dev/null | head -1)"
+        [[ "${live_disk}" == /dev/ ]] && live_disk="${live_dev}"
+    fi
+    lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}' \
+        | grep -v -e '^/dev/zram' -e '^/dev/loop' | grep -vxF "${live_disk:-none}" || true
+}
+
+if [[ "${1:-}" == --list-disks ]]; then
+    # Tab-getrennt: Gerät, Größe in GiB, Modell (für kairo-install-gui)
+    while read -r d; do
+        printf '%s\t%s\t%s\n' "${d}" "$(( $(lsblk -dbno SIZE "${d}") / 1024 / 1024 / 1024 ))" \
+            "$(lsblk -dno MODEL "${d}" | sed 's/[[:space:]]*$//')"
+    done < <(list_disks)
+    exit 0
+fi
 
 # Bei Fehler: Festplatte wieder aushängen und Hinweis geben
 on_error() {
     printf '\n%sDie Installation ist fehlgeschlagen.%s Die Meldung steht oben.\n' "${red}" "${off}" >&2
     printf 'Protokoll: /tmp/kairo-install.log\n' >&2
     umount -R "${mnt}" 2>/dev/null || true
-    [[ -n "${KAIRO_SELFTEST:-}" ]] && echo KAIRO_INSTALL_FAILED > /dev/ttyS0
+    cryptsetup close "${crypt_name}" 2>/dev/null || true
+    if [[ -n "${KAIRO_SELFTEST:-}" ]]; then echo KAIRO_INSTALL_FAILED > /dev/ttyS0; fi
 }
 trap on_error ERR
 
@@ -56,10 +101,11 @@ exec > >(tee -a /tmp/kairo-install.log) 2>&1
 
 printf '%s\n' "${bold}Kairo OS installieren${off}"
 printf 'Dieser Installer löscht eine GANZE Festplatte und installiert Kairo darauf.\n'
+progress 1
 
 info "Prüfe Internetverbindung"
 until curl -sI --max-time 10 https://geo.mirror.pkgbuild.com >/dev/null; do
-    [[ -n "${KAIRO_YES:-}" ]] && die "Kein Internet."
+    [[ -n "${KAIRO_YES:-}" ]] && die "Kein Internet. Bitte WLAN oben rechts verbinden."
     printf 'Kein Internet. WLAN oben rechts im Desktop verbinden (oder: nmtui), dann Enter drücken. '
     read -r _
 done
@@ -67,14 +113,7 @@ echo "Internet ok"
 
 # --- 2. Festplatte wählen --------------------------------------------------------
 
-# Der USB-Stick, von dem Kairo gerade läuft, darf nie gewählt werden
-live_dev="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
-live_disk=""
-[[ -n "${live_dev}" ]] && live_disk="/dev/$(lsblk -no PKNAME "${live_dev}" 2>/dev/null | head -1)"
-[[ "${live_disk}" == /dev/ ]] && live_disk="${live_dev}"
-
-mapfile -t disks < <(lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}' \
-                     | grep -v -e '^/dev/zram' -e '^/dev/loop' | grep -vxF "${live_disk:-none}" || true)
+mapfile -t disks < <(list_disks)
 (( ${#disks[@]} )) || die "Keine Festplatte gefunden."
 
 if [[ -n "${KAIRO_DISK:-}" ]]; then
@@ -97,7 +136,20 @@ fi
 size_gib=$(( $(lsblk -dbno SIZE "${disk}") / 1024 / 1024 / 1024 ))
 (( size_gib >= min_gib )) || die "${disk} hat nur ${size_gib} GiB, Kairo braucht mindestens ${min_gib} GiB."
 
-# --- 3. Benutzer ------------------------------------------------------------------
+# --- 3. Benutzer und Verschlüsselung -------------------------------------------------
+
+# ask_password <Bezeichnung> <Mindestlänge>: zweimal fragen, bis beides gleich ist
+ask_password() {
+    local p1 p2
+    while true; do
+        read -rsp "$1: " p1; echo >&2
+        read -rsp "$1 wiederholen: " p2; echo >&2
+        if (( ${#p1} < $2 )); then echo "Mindestens $2 Zeichen, bitte nochmal." >&2; continue; fi
+        [[ "${p1}" == "${p2}" ]] && break
+        echo "Nicht gleich, bitte nochmal." >&2
+    done
+    printf '%s' "${p1}"
+}
 
 if [[ -n "${KAIRO_USER:-}" ]]; then
     user="${KAIRO_USER}"
@@ -109,56 +161,102 @@ else
         echo "Nur Kleinbuchstaben, Ziffern, - und _, am Anfang ein Buchstabe."
     done
 fi
-[[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "Ungültiger Benutzername: ${user}"
+[[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${user}" != root ]] || die "Ungültiger Benutzername: ${user}"
 
-if [[ -n "${KAIRO_PASSWORD:-}" ]]; then
+if [[ -n "${KAIRO_PASSWORD_FILE:-}" ]]; then
+    password="$(read_secret_file "${KAIRO_PASSWORD_FILE}")"
+elif [[ -n "${KAIRO_PASSWORD:-}" ]]; then
     password="${KAIRO_PASSWORD}"
 else
-    while true; do
-        read -rsp "Passwort: " password; echo
-        read -rsp "Passwort wiederholen: " password2; echo
-        [[ -n "${password}" && "${password}" == "${password2}" ]] && break
-        echo "Leer oder nicht gleich, bitte nochmal."
-    done
+    password="$(ask_password "Passwort" 1)"
+fi
+[[ -n "${password}" ]] || die "Leeres Passwort."
+
+encrypt="${KAIRO_ENCRYPT:-}"
+if [[ -z "${KAIRO_YES:-}" && -z "${encrypt}" ]]; then
+    info "Verschlüsselung"
+    printf 'Mit Verschlüsselung fragt Kairo beim Start nach einem Passwort. Wird der\n'
+    printf 'PC gestohlen, kommt niemand an deine Daten. Vergisst du es, sind sie weg.\n'
+    read -rp "Festplatte verschlüsseln? [j/N] " answer
+    [[ "${answer,,}" == j* ]] && encrypt=1
+fi
+crypt_password=""
+if [[ -n "${encrypt}" ]]; then
+    if [[ -n "${KAIRO_CRYPT_PASSWORD_FILE:-}" ]]; then
+        crypt_password="$(read_secret_file "${KAIRO_CRYPT_PASSWORD_FILE}")"
+    elif [[ -n "${KAIRO_CRYPT_PASSWORD:-}" ]]; then
+        crypt_password="${KAIRO_CRYPT_PASSWORD}"
+    else
+        crypt_password="$(ask_password "Passwort für die Verschlüsselung" 8)"
+    fi
+    (( ${#crypt_password} >= 8 )) || die "Das Verschlüsselungs-Passwort braucht mindestens 8 Zeichen."
 fi
 
 # --- 4. Letzte Bestätigung --------------------------------------------------------
 
 info "Zusammenfassung"
-printf '  Festplatte:  %s (%s GiB) %s\n' "${disk}" "${size_gib}" "$(lsblk -dno MODEL "${disk}")"
-printf '  Benutzer:    %s (Administrator, sudo)\n' "${user}"
-printf '  Sprache:     Deutsch, Tastatur deutsch, Zeitzone Europe/Berlin\n'
+printf '  Festplatte:      %s (%s GiB) %s\n' "${disk}" "${size_gib}" "$(lsblk -dno MODEL "${disk}")"
+printf '  Benutzer:        %s (Administrator, sudo)\n' "${user}"
+printf '  Verschlüsselung: %s\n' "$([[ -n "${encrypt}" ]] && echo "ja (Passwort beim Start)" || echo nein)"
+printf '  Snapshots:       ja, vor jedem Update automatisch\n'
+printf '  Sprache:         Deutsch, Tastatur deutsch, Zeitzone Europe/Berlin\n'
 printf '\n  %sALLE DATEN AUF %s WERDEN GELÖSCHT.%s\n\n' "${red}" "${disk}" "${off}"
 if [[ -z "${KAIRO_YES:-}" ]]; then
     read -rp "Zum Fortfahren LÖSCHEN eintippen: " answer
     [[ "${answer}" == "LÖSCHEN" || "${answer}" == "LOESCHEN" ]] || die "Abgebrochen, nichts wurde verändert."
 fi
 
-# --- 5. Partitionieren und formatieren -------------------------------------------
+# --- 5. Partitionieren, verschlüsseln, formatieren -------------------------------
 
 info "Partitioniere ${disk}"
+progress 5
 umount -R "${mnt}" 2>/dev/null || true
+cryptsetup close "${crypt_name}" 2>/dev/null || true
 swapoff -a 2>/dev/null || true
 wipefs --all --force "${disk}"
 sgdisk --zap-all "${disk}"
-sgdisk -n 1:0:+1G -t 1:ef00 -c 1:EFI \
-       -n 2:0:0   -t 2:8304 -c 2:Kairo "${disk}"
+# 8309 = Linux LUKS, 8304 = Linux-Root (x86-64)
+sgdisk -n 1:0:+2G -t 1:ef00 -c 1:EFI \
+       -n 2:0:0   -t "2:$([[ -n "${encrypt}" ]] && echo 8309 || echo 8304)" -c 2:Kairo "${disk}"
 partprobe "${disk}" || true
 udevadm settle
 
 mapfile -t parts < <(lsblk -lnpo NAME,TYPE "${disk}" | awk '$2 == "part" {print $1}')
 (( ${#parts[@]} == 2 )) || die "Partitionen nicht gefunden (${parts[*]:-keine})."
-efi="${parts[0]}" root="${parts[1]}"
+efi="${parts[0]}" root_part="${parts[1]}"
 
 mkfs.fat -F 32 -n EFI "${efi}"
-mkfs.ext4 -F -L Kairo "${root}"
 
-mount "${root}" "${mnt}"
+if [[ -n "${encrypt}" ]]; then
+    info "Verschlüssele ${root_part} (LUKS2)"
+    printf '%s' "${crypt_password}" \
+        | cryptsetup luksFormat --type luks2 --batch-mode --label KairoCrypt --key-file=- "${root_part}"
+    printf '%s' "${crypt_password}" \
+        | cryptsetup open --key-file=- "${root_part}" "${crypt_name}"
+    root_dev="/dev/mapper/${crypt_name}"
+else
+    root_dev="${root_part}"
+fi
+
+info "Lege Btrfs mit Subvolumes an"
+mkfs.btrfs -f -L Kairo "${root_dev}"
+mount "${root_dev}" "${mnt}"
+for sv in @ @home @snapshots @var_log @pkg; do
+    btrfs subvolume create "${mnt}/${sv}"
+done
+umount "${mnt}"
+
+mount -o "${btrfs_opts},subvol=@" "${root_dev}" "${mnt}"
+mount --mkdir -o "${btrfs_opts},subvol=@home" "${root_dev}" "${mnt}/home"
+mount --mkdir -o "${btrfs_opts},subvol=@snapshots" "${root_dev}" "${mnt}/.snapshots"
+mount --mkdir -o "${btrfs_opts},subvol=@var_log" "${root_dev}" "${mnt}/var/log"
+mount --mkdir -o "${btrfs_opts},subvol=@pkg" "${root_dev}" "${mnt}/var/cache/pacman/pkg"
 mount --mkdir -o umask=0077 "${efi}" "${mnt}/boot"
 
 # --- 6. Pakete installieren -------------------------------------------------------
 
 info "Bereite Paketquellen vor"
+progress 8
 systemctl start pacman-init.service 2>/dev/null || true
 if ! grep -q '^Server' /etc/pacman.d/mirrorlist; then
     cat > /etc/pacman.d/mirrorlist <<'EOF'
@@ -171,39 +269,76 @@ fi
 # multilib (32-Bit-Pakete) wird für Steam gebraucht
 pacman_conf=/tmp/kairo-pacman.conf
 sed -e '/^#\[multilib\]$/,/^#Include/ s/^#//' -e 's/^#ParallelDownloads.*/ParallelDownloads = 5/' \
-    /etc/pacman.conf > "${pacman_conf}"
+    -e 's/^#Color$/Color/' /etc/pacman.conf > "${pacman_conf}"
 grep -q '^\[multilib\]' "${pacman_conf}" || die "multilib konnte nicht aktiviert werden."
 pacman --config "${pacman_conf}" -Sy --noconfirm --needed archlinux-keyring
 
+# Eigene Kernel-Einstellungen VOR pacstrap, damit das erste Initramfs schon
+# passt (Verschlüsselung, Boot-Animation, deutsche Tastatur beim Passwort)
+install -Dm 0644 /dev/stdin "${mnt}/etc/mkinitcpio.conf.d/kairo.conf" <<'EOF'
+# Kairo: systemd-Initramfs mit Boot-Animation (plymouth), deutscher Tastatur
+# beim Verschlüsselungs-Passwort (sd-vconsole) und Entschlüsseln (sd-encrypt)
+HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole plymouth block sd-encrypt filesystems fsck)
+EOF
+printf 'KEYMAP=de-latin1\nFONT=ter-v16n\n' | install -Dm 0644 /dev/stdin "${mnt}/etc/vconsole.conf"
+
 mapfile -t pkgs < <(read_list "${share}/packages.target")
 info "Installiere ${#pkgs[@]} Pakete (dauert je nach Internet 10-30 Minuten)"
+progress 10
 pacstrap -C "${pacman_conf}" -K "${mnt}" "${pkgs[@]}"
+progress 75
 
 install -m 0644 "${pacman_conf}" "${mnt}/etc/pacman.conf"
 install -m 0644 /etc/pacman.d/mirrorlist "${mnt}/etc/pacman.d/mirrorlist"
 genfstab -U "${mnt}" >> "${mnt}/etc/fstab"
+# Ohne subvolid: Nach dem Zurückrollen hat das neue @ eine andere ID, der Name
+# bleibt gleich. Mit subvolid würde der Start dann scheitern.
+sed -i 's/,subvolid=[0-9]*//' "${mnt}/etc/fstab"
 
 # --- 7. Kairo-Dateien ---------------------------------------------------------------
 
-info "Kopiere Kairo-Einstellungen"
+info "Kopiere Kairo-Einstellungen und Apps"
+progress 78
 cp -a "${share}/target/." "${mnt}/"
-chmod 0755 "${mnt}/usr/local/bin/kairo-firstboot"
-install -Dm 0644 "${share}/os-release" "${mnt}/usr/local/share/kairo/os-release"
+chmod 0755 "${mnt}"/usr/local/bin/*
+install -d "${mnt}/usr/local/share/kairo"
+cp -a "${share}/branding" "${mnt}/usr/local/share/kairo/"
+install -m 0644 "${share}/os-release" "${mnt}/usr/local/share/kairo/os-release"
 install -m 0644 "${share}/os-release" "${mnt}/usr/lib/os-release"
 install -m 0644 "${share}/flatpaks.target" "${mnt}/usr/local/share/kairo/flatpaks.target"
+# Wiederherstellen geht auch vom USB-Stick, darum liegt das Skript in beiden
+install -m 0755 /usr/local/bin/kairo-rollback "${mnt}/usr/local/bin/kairo-rollback"
 
 if [[ -n "${KAIRO_SELFTEST:-}" ]]; then
     install -m 0755 "${share}/selftest/kairo-selftest" "${mnt}/usr/local/bin/kairo-selftest"
     install -m 0644 "${share}/selftest/kairo-selftest.service" "${mnt}/etc/systemd/system/"
+    if [[ -n "${encrypt}" ]]; then
+        # Der Test kann beim Start kein Passwort tippen: zweiter Schlüssel als
+        # Datei im Initramfs. NUR im Test, auf einem echten PC wäre das
+        # Verschlüsseln damit wertlos.
+        install -d -m 0700 "${mnt}/etc/cryptsetup-keys.d"
+        head -c 64 /dev/urandom > "${mnt}/etc/cryptsetup-keys.d/${crypt_name}.key"
+        chmod 0600 "${mnt}/etc/cryptsetup-keys.d/${crypt_name}.key"
+        printf '%s' "${crypt_password}" | cryptsetup luksAddKey --key-file=- \
+            "${root_part}" "${mnt}/etc/cryptsetup-keys.d/${crypt_name}.key"
+        echo "FILES=(/etc/cryptsetup-keys.d/${crypt_name}.key)" \
+            > "${mnt}/etc/mkinitcpio.conf.d/kairo-selftest.conf"
+    fi
 fi
 
 # --- 8. System einrichten (im neuen System) ----------------------------------------
 
 info "Richte das System ein"
-root_uuid="$(blkid -s UUID -o value "${root}")"
+progress 82
+if [[ -n "${encrypt}" ]]; then
+    luks_uuid="$(cryptsetup luksUUID "${root_part}")"
+    root_opts="rd.luks.name=${luks_uuid}=${crypt_name} root=/dev/mapper/${crypt_name}"
+else
+    root_opts="root=UUID=$(blkid -s UUID -o value "${root_dev}")"
+fi
 # Variablen gehen über die Umgebung rein, damit das Passwort nicht in der
 # Befehlszeile (ps) auftaucht
-KAIRO_U="${user}" KAIRO_P="${password}" KAIRO_ROOT_UUID="${root_uuid}" \
+KAIRO_U="${user}" KAIRO_P="${password}" KAIRO_ROOT_OPTS="${root_opts}" \
 KAIRO_SELFTEST="${KAIRO_SELFTEST:-}" \
 arch-chroot "${mnt}" /bin/bash -euo pipefail <<'CHROOT'
 ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
@@ -212,7 +347,6 @@ hwclock --systohc || true
 sed -i -e 's/^#de_DE.UTF-8 UTF-8/de_DE.UTF-8 UTF-8/' -e 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 echo 'LANG=de_DE.UTF-8' > /etc/locale.conf
-printf 'KEYMAP=de-latin1\nFONT=ter-v16n\n' > /etc/vconsole.conf
 echo kairo > /etc/hostname
 
 # Benutzer: Administrator über sudo, root selbst bekommt kein Passwort
@@ -225,13 +359,43 @@ passwd -l root
 echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
 chmod 0440 /etc/sudoers.d/10-wheel
 
-# Dienste
-systemctl enable gdm NetworkManager bluetooth fstrim.timer paccache.timer \
-    systemd-timesyncd kairo-firstboot.service
-[[ -n "${KAIRO_SELFTEST}" ]] && systemctl enable kairo-selftest.service
-dconf update
+# Snapshots: snapper für / (ohne create-config, weil @snapshots schon
+# als eigenes Subvolume unter /.snapshots hängt). snap-pac macht vor und
+# nach jedem pacman-Lauf einen Snapshot, höchstens 10 werden behalten.
+sed -e 's/^SUBVOLUME=.*/SUBVOLUME="\/"/' \
+    -e 's/^ALLOW_GROUPS=.*/ALLOW_GROUPS="wheel"/' \
+    -e 's/^SYNC_ACL=.*/SYNC_ACL="yes"/' \
+    -e 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="no"/' \
+    -e 's/^NUMBER_LIMIT=.*/NUMBER_LIMIT="10"/' \
+    -e 's/^NUMBER_LIMIT_IMPORTANT=.*/NUMBER_LIMIT_IMPORTANT="5"/' \
+    /usr/share/snapper/config-templates/default > /etc/snapper/configs/root
+chmod 0640 /etc/snapper/configs/root
+echo 'SNAPPER_CONFIGS="root"' > /etc/conf.d/snapper
+chmod 0750 /.snapshots
 
-# Bootloader: systemd-boot mit linux-zen und AMD-Microcode
+# Boot-Animation: eigenes Theme "kairo" auf Basis von "spinner"
+theme=/usr/share/plymouth/themes/kairo
+install -d "${theme}"
+cp /usr/share/plymouth/themes/spinner/*.png "${theme}/"
+install -m 0644 /usr/local/share/kairo/branding/plymouth-watermark.png "${theme}/watermark.png"
+sed -e 's/^Name=.*/Name=Kairo/' \
+    -e "s|^ImageDir=.*|ImageDir=${theme}|" \
+    -e 's/^WatermarkVerticalAlignment=.*/WatermarkVerticalAlignment=.45/' \
+    -e 's/^Background\(Start\|End\)Color=.*/Background\1Color=0x121514/' \
+    /usr/share/plymouth/themes/spinner/spinner.plymouth > "${theme}/kairo.plymouth"
+printf '[Daemon]\nTheme=kairo\nShowDelay=0\n' > /etc/plymouth/plymouthd.conf
+
+# Dienste (systemweit) und Update-Prüfung (für jeden Benutzer)
+systemctl enable gdm NetworkManager bluetooth fstrim.timer paccache.timer \
+    systemd-timesyncd snapper-cleanup.timer kairo-firstboot.service
+systemctl --global enable kairo-update-check.timer
+if [[ -n "${KAIRO_SELFTEST}" ]]; then systemctl enable kairo-selftest.service; fi
+dconf update
+gtk-update-icon-cache -f /usr/local/share/icons/hicolor 2>/dev/null || true
+
+# Initramfs neu (Theme, Hooks), danach Bootloader
+mkinitcpio -P
+
 bootctl install
 cat > /boot/loader/loader.conf <<EOF
 default kairo.conf
@@ -241,26 +405,44 @@ editor no
 EOF
 for entry in kairo:"" kairo-fallback:-fallback; do
     name="${entry%%:*}" suffix="${entry#*:}"
-    title="Kairo OS"; [[ -n "${suffix}" ]] && title="Kairo OS (Notfall)"
+    title="Kairo OS"; extra="quiet splash"
+    if [[ -n "${suffix}" ]]; then title="Kairo OS (Notfall)"; extra=""; fi
     cat > "/boot/loader/entries/${name}.conf" <<EOF
 title   ${title}
 linux   /vmlinuz-linux-zen
-initrd  /amd-ucode.img
 initrd  /initramfs-linux-zen${suffix}.img
-options root=UUID=${KAIRO_ROOT_UUID} rw quiet
+options ${KAIRO_ROOT_OPTS} rootflags=subvol=@ rw ${extra}
 EOF
 done
+
+# Erster Snapshot: der frisch installierte Zustand
+snapper --no-dbus -c root create -t single -c important -d "Kairo frisch installiert"
 CHROOT
+
+# Starteintrag in der UEFI-Firmware. Das muss HIER passieren, nicht im chroot:
+# Dort überspringt bootctl das ("Not booted with EFI or running in a
+# container"), und die Firmware würde Kairo hinter PXE und EFI-Shell einreihen.
+info "Trage Kairo als ersten Starteintrag in die UEFI-Firmware ein"
+while read -r old_entry; do
+    efibootmgr --quiet --bootnum "${old_entry}" --delete-bootnum
+done < <(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} Kairo OS\b.*/\1/p')
+efibootmgr --quiet --create --disk "${disk}" --part 1 --label "Kairo OS" \
+    --loader '\EFI\systemd\systemd-bootx64.efi'
+efibootmgr | grep -E '^(BootOrder|Boot[0-9A-Fa-f]{4}\*? Kairo OS)'
 
 # --- 9. Fertig -----------------------------------------------------------------------
 
+progress 98
 sync
 umount -R "${mnt}"
+if [[ -n "${encrypt}" ]]; then cryptsetup close "${crypt_name}"; fi
 trap - ERR
-[[ -n "${KAIRO_SELFTEST:-}" ]] && echo KAIRO_INSTALL_DONE > /dev/ttyS0
+progress 100
+if [[ -n "${KAIRO_SELFTEST:-}" ]]; then echo KAIRO_INSTALL_DONE > /dev/ttyS0; fi
 
 printf '\n%sKairo OS ist installiert.%s\n\n' "${green}" "${off}"
 printf '  1. Rechner ausschalten, USB-Stick abziehen, wieder einschalten.\n'
+[[ -n "${encrypt}" ]] && printf '     Beim Start fragt Kairo nach dem Verschlüsselungs-Passwort.\n'
 printf '  2. Mit "%s" anmelden.\n' "${user}"
 printf '  3. Beim ersten Start mit Internet lädt Kairo im Hintergrund Roblox (Sober),\n'
 printf '     Spotify, VS Code, Claude Code und Codex nach. Das dauert ein paar Minuten.\n\n'

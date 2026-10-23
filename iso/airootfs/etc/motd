@@ -1,10 +1,11 @@
 
-  Willkommen bei Kairo OS 0.2 (Live)
+  Willkommen bei Kairo OS 1.0 (Live)
 
   Dies ist ein Live-System. Nichts wird auf deine Festplatte geschrieben,
   solange du es nicht selbst ausdrücklich tust.
 
-  Installieren:  kairo-install   (oder "Kairo installieren" im Desktop)
+  Installieren:  "Kairo installieren" im Desktop (oder kairo-install)
+  Reparieren:    kairo-rollback (Kairo auf einen Snapshot zurücksetzen)
   Netzwerk:      nmtui
   Systeminfo:    fastfetch
 

@@ -80,7 +80,9 @@ class KairoDesktopTest(unittest.TestCase):
         # Was der Nutzer ausdrücklich wollte: AMD, GNOME, Gaming, Apps
         for pkg in ["linux-zen", "amd-ucode", "vulkan-radeon", "lib32-vulkan-radeon",
                     "gnome", "gdm", "steam", "discord", "firefox", "chromium",
-                    "zram-generator", "gamemode", "flatpak", "nodejs", "npm"]:
+                    "zram-generator", "gamemode", "flatpak", "nodejs", "npm",
+                    "btrfs-progs", "snapper", "snap-pac", "cryptsetup", "plymouth",
+                    "zenity", "libnotify", "terminus-font", "openai-codex"]:
             with self.subTest(pflicht=pkg):
                 self.assertIn(pkg, pkgs)
 
@@ -117,8 +119,9 @@ class KairoDesktopTest(unittest.TestCase):
     def test_desktop_eintraege(self):
         files = [self.AIROOTFS / "usr/share/applications/kairo-install.desktop",
                  *(self.SHARE / "target/usr/local/share/applications").glob("*.desktop")]
-        self.assertEqual(len(files), 3)
-        icons = self.SHARE / "target/usr/local/share/icons/hicolor/scalable/apps"
+        self.assertEqual(len(files), 5)
+        icon_dirs = [base / "usr/local/share/icons/hicolor/scalable/apps"
+                     for base in (self.SHARE / "target", self.AIROOTFS)]
         for f in files:
             with self.subTest(datei=f.name):
                 ini = configparser.ConfigParser(interpolation=None)
@@ -128,7 +131,50 @@ class KairoDesktopTest(unittest.TestCase):
                 self.assertEqual(entry["Type"], "Application")
                 self.assertTrue(entry["Name"] and entry["Exec"])
                 if entry["Icon"].startswith("kairo-"):
-                    self.assertTrue((icons / f"{entry['Icon']}.svg").is_file())
+                    # exists() folgt Symlinks: das Ziel muss es wirklich geben
+                    self.assertTrue(any((d / f"{entry['Icon']}.svg").exists() for d in icon_dirs))
+
+    def test_design_dateien(self):
+        branding = self.SHARE / "branding"
+        for name in ["kairo-logo.svg", "wallpaper.png", "gdm-logo.png",
+                     "plymouth-watermark.png", "fastfetch-logo.txt"]:
+            with self.subTest(datei=name):
+                self.assertTrue((branding / name).is_file())
+        # syslinux zeigt nur Bilder in genau 640x480 an
+        png = (ISO / "syslinux/splash.png").read_bytes()
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual((int.from_bytes(png[16:20], "big"), int.from_bytes(png[20:24], "big")),
+                         (640, 480))
+        # Das Symbol "kairo-logo" (os-release LOGO) zeigt auf das Logo
+        for base in [self.AIROOTFS, self.SHARE / "target"]:
+            icon = base / "usr/local/share/icons/hicolor/scalable/apps/kairo-logo.svg"
+            with self.subTest(symbol=str(icon.relative_to(ISO))):
+                self.assertTrue(icon.is_symlink())
+                link = os.path.normpath(icon.parent / os.readlink(icon))
+                self.assertEqual(Path(link).relative_to(self.AIROOTFS) if base == self.AIROOTFS
+                                 else Path(link).relative_to(self.SHARE / "target"),
+                                 Path("usr/local/share/kairo/branding/kairo-logo.svg"))
+        for db in [self.AIROOTFS / "etc/dconf/db/local.d/00-kairo-live",
+                   self.SHARE / "target/etc/dconf/db/local.d/00-kairo"]:
+            with self.subTest(dconf=db.name):
+                text = db.read_text()
+                self.assertIn("/usr/local/share/kairo/branding/wallpaper.png", text)
+                self.assertIn("accent-color='green'", text)
+
+    def test_wiederherstellen_auch_vom_usb_stick(self):
+        """kairo-rollback muss im Live-System liegen (Kairo startet nicht mehr)
+        und wird vom Installer ins neue System kopiert."""
+        self.assertTrue((self.AIROOTFS / "usr/local/bin/kairo-rollback").is_file())
+        self.assertIn("/usr/local/bin/kairo-rollback",
+                      (self.AIROOTFS / "usr/local/bin/kairo-install").read_text())
+
+    def test_polkit_regeln_passen_zu_den_skripten(self):
+        policy = (self.SHARE / "target/usr/share/polkit-1/actions/org.kairo.policy").read_text()
+        for path in re.findall(r'exec.path">([^<]+)<', policy):
+            with self.subTest(pfad=path):
+                name = Path(path).name
+                self.assertTrue((self.SHARE / "target/usr/local/bin" / name).is_file()
+                                or (self.AIROOTFS / "usr/local/bin" / name).is_file())
 
     def test_selbsttest_nicht_im_normalen_ziel(self):
         """Der Selbsttest schaltet den PC aus, er darf nie normal mitkommen."""
@@ -167,7 +213,7 @@ class AssembledProfileTest(unittest.TestCase):
         self.assertEqual(name, "kairo")
         self.assertRegex(label, r"^KAIRO_\d{6}$")
         self.assertLessEqual(len(label), 32)
-        self.assertRegex(version, r"^0\.2-\d{4}\.\d{2}\.\d{2}$")
+        self.assertRegex(version, r"^1\.0-\d{4}\.\d{2}\.\d{2}$")
         self.assertEqual(app, "Kairo OS Live")
 
     def test_bootmodi_von_releng_geerbt(self):

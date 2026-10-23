@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+#
+# kairo-rollback: setzt Kairo auf einen früheren Snapshot zurück.
+#
+# Snapshots entstehen automatisch vor und nach jedem Update (snap-pac).
+# Zurückgesetzt wird nur das System (/), NICHT deine Dateien in /home.
+#
+# Läuft an zwei Orten:
+#   - im installierten Kairo (Terminal oder App "Kairo Wiederherstellen")
+#   - vom Kairo-USB-Stick, wenn Kairo selbst nicht mehr startet
+#
+# Aufruf (als root):
+#   kairo-rollback                  Snapshots anzeigen, Nummer wählen
+#   kairo-rollback --list           nur anzeigen (Tab-getrennt, für die App)
+#   kairo-rollback [--yes] NUMMER   diesen Snapshot wiederherstellen
+#
+# Was passiert:
+#   1. Das jetzige System (Subvolume @) wird umbenannt in @kairo-alt-DATUM
+#      (bleibt erhalten, die zwei neuesten werden aufgehoben)
+#   2. Aus dem Snapshot wird ein neues, beschreibbares @
+#   3. Kernel und Initramfs auf der EFI-Partition werden passend zum
+#      Snapshot neu erzeugt (sonst passen Kernel und Module nicht zusammen)
+#   4. Neustart: Kairo startet im alten Zustand
+
+set -euo pipefail
+
+work=/run/kairo-rollback
+top="${work}/top"
+new="${work}/new"
+crypt_name=kairo-root
+keep_old=2
+
+die()  { printf 'FEHLER: %s\n' "$*" >&2; exit 1; }
+info() { printf '==> %s\n' "$*"; }
+
+cleanup() {
+    umount -R "${new}" 2>/dev/null || true
+    umount "${top}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+(( EUID == 0 )) || die "Bitte als root starten: sudo kairo-rollback"
+
+# --- Btrfs-Gerät finden ----------------------------------------------------------
+
+live=""
+if [[ -d /run/archiso ]]; then
+    live=1
+    # Vom USB-Stick: die Kairo-Partition anhand ihres Namens finden
+    part="$(lsblk -lnpo NAME,PARTLABEL | awk '$2 == "Kairo" {print $1; exit}')"
+    [[ -n "${part}" ]] || die "Keine Kairo-Installation gefunden."
+    if [[ "$(lsblk -no FSTYPE "${part}" | head -1)" == crypto_LUKS ]]; then
+        if [[ ! -e "/dev/mapper/${crypt_name}" ]]; then
+            info "Die Festplatte ist verschlüsselt."
+            cryptsetup open "${part}" "${crypt_name}"
+        fi
+        dev="/dev/mapper/${crypt_name}"
+    else
+        dev="${part}"
+    fi
+    efi="$(lsblk -lnpo NAME,PARTLABEL "/dev/$(lsblk -no PKNAME "${part}" | head -1)" \
+           | awk '$2 == "EFI" {print $1; exit}')"
+    [[ -n "${efi}" ]] || die "EFI-Partition nicht gefunden."
+else
+    [[ "$(findmnt -no FSTYPE /)" == btrfs ]] || die "Das System liegt nicht auf Btrfs, Snapshots gibt es hier nicht."
+    dev="$(findmnt -no SOURCE / | sed 's/\[.*\]$//')"
+fi
+
+mkdir -p "${top}" "${new}"
+mountpoint -q "${top}" || mount -o subvolid=5 "${dev}" "${top}"
+[[ -d "${top}/@" && -d "${top}/@snapshots" ]] || die "Unbekannter Aufbau (kein @ oder @snapshots)."
+
+# --- Snapshots auflisten ---------------------------------------------------------
+
+# Ausgabe: Nummer, Datum, Art, Beschreibung (neueste zuerst)
+list_snapshots() {
+    local info num date type desc
+    for info in "${top}"/@snapshots/*/info.xml; do
+        [[ -e "${info}" ]] || continue
+        num="$(sed -n 's:.*<num>\(.*\)</num>.*:\1:p' "${info}")"
+        date="$(sed -n 's:.*<date>\(.*\)</date>.*:\1:p' "${info}")"
+        type="$(sed -n 's:.*<type>\(.*\)</type>.*:\1:p' "${info}")"
+        desc="$(sed -n 's:.*<description>\(.*\)</description>.*:\1:p' "${info}")"
+        case "${type}" in
+            pre)  type="vor Update" ;;
+            post) type="nach Update" ;;
+            *)    type="manuell" ;;
+        esac
+        # snapper speichert UTC, angezeigt wird Ortszeit
+        date="$(date -d "${date} UTC" '+%d.%m.%Y %H:%M' 2>/dev/null || echo "${date}")"
+        if [[ -d "${top}/@snapshots/${num}/snapshot" ]]; then
+            printf '%s\t%s\t%s\t%s\n' "${num}" "${date}" "${type}" "${desc:-?}"
+        fi
+    done | sort -t $'\t' -k1,1nr
+}
+
+if [[ "${1:-}" == --list ]]; then
+    list_snapshots
+    exit 0
+fi
+
+yes=""
+if [[ "${1:-}" == --yes ]]; then yes=1; shift; fi
+num="${1:-}"
+
+if [[ -z "${num}" ]]; then
+    printf '\nVerfügbare Snapshots (neueste zuerst):\n\n'
+    printf '  %-5s %-17s %-12s %s\n' Nr. Datum Art Beschreibung
+    list_snapshots | while IFS=$'\t' read -r n d t desc; do
+        printf '  %-5s %-17s %-12s %s\n' "${n}" "${d}" "${t}" "${desc}"
+    done
+    printf '\nTipp: "vor Update" ist der Stand direkt vor einem Update.\n'
+    read -rp "Nummer zum Wiederherstellen (leer = abbrechen): " num
+    [[ -n "${num}" ]] || { echo "Abgebrochen."; exit 0; }
+fi
+
+[[ "${num}" =~ ^[0-9]+$ ]] || die "Ungültige Nummer: ${num}"
+snap="${top}/@snapshots/${num}/snapshot"
+[[ -d "${snap}" ]] || die "Snapshot ${num} gibt es nicht."
+
+if [[ -z "${yes}" ]]; then
+    printf '\nKairo wird auf Snapshot %s zurückgesetzt. Deine Dateien in /home bleiben.\n' "${num}"
+    read -rp "Fortfahren? [j/N] " answer
+    [[ "${answer,,}" == j* ]] || { echo "Abgebrochen."; exit 0; }
+fi
+
+# --- Zurücksetzen ----------------------------------------------------------------
+
+stamp="$(date +%Y%m%d-%H%M%S)"
+info "Sichere jetziges System als @kairo-alt-${stamp}"
+mv "${top}/@" "${top}/@kairo-alt-${stamp}"
+info "Stelle Snapshot ${num} wieder her"
+btrfs subvolume snapshot "${snap}" "${top}/@"
+
+# Ältere Sicherungen aufräumen, die neuesten ${keep_old} bleiben
+mapfile -t old < <(find "${top}" -maxdepth 1 -name '@kairo-alt-*' -printf '%f\n' | sort -r)
+for o in "${old[@]:${keep_old}}"; do
+    info "Lösche alte Sicherung ${o}"
+    btrfs subvolume delete "${top}/${o}" >/dev/null
+done
+
+# --- Kernel und Initramfs passend zum Snapshot ------------------------------------
+
+info "Erzeuge Kernel und Initramfs passend zum Snapshot"
+mount -o subvol=@ "${dev}" "${new}"
+if [[ -n "${live}" ]]; then
+    mount -o umask=0077 "${efi}" "${new}/boot"
+else
+    mount --bind /boot "${new}/boot"
+fi
+for pkgbase in "${new}"/usr/lib/modules/*/pkgbase; do
+    [[ -e "${pkgbase}" ]] || continue
+    kernel="$(<"${pkgbase}")"
+    install -m 0644 "$(dirname "${pkgbase}")/vmlinuz" "${new}/boot/vmlinuz-${kernel}"
+    arch-chroot "${new}" mkinitcpio -p "${kernel}"
+done
+
+sync
+info "Fertig. Bitte neu starten, dann läuft Kairo im Zustand von Snapshot ${num}."

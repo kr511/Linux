@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160">
+  <!-- Ruhig und dunkel, grüne Bögen unten rechts, das K als Wasserzeichen -->
+  <defs>
+    <radialGradient id="glow" cx="78%" cy="82%" r="70%">
+      <stop offset="0" stop-color="#1d2a24"/>
+      <stop offset="1" stop-color="#121514"/>
+    </radialGradient>
+  </defs>
+  <rect width="3840" height="2160" fill="url(#glow)"/>
+  <g fill="none" stroke="#4cc38a" stroke-linecap="round">
+    <circle cx="3300" cy="1900" r="900" stroke-width="3" opacity=".22"/>
+    <circle cx="3300" cy="1900" r="1250" stroke-width="3" opacity=".14"/>
+    <circle cx="3300" cy="1900" r="1600" stroke-width="3" opacity=".08"/>
+    <path d="M2400 1900 A900 900 0 0 1 3300 1000" stroke-width="10" opacity=".55"/>
+  </g>
+  <g fill="none" stroke="#4cc38a" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" opacity=".18">
+    <path d="M3200 1580 V1820"/>
+    <path d="M3368 1580 L3248 1700 L3368 1820"/>
+  </g>
+</svg>

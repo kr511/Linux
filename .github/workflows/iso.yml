@@ -100,17 +100,18 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # uefi/bios: Live-System vom Stick. install: kairo-install auf eine
-  # virtuelle Festplatte, dann erster Start davon (lädt Flatpaks, dauert)
+  # uefi/bios: Live-System vom Stick. install(-crypt): kairo-install auf eine
+  # virtuelle Festplatte (ohne/mit Verschlüsselung), erster Start davon
+  # (lädt Flatpaks, dauert), dann Zurückrollen auf einen Snapshot
   boot-test:
     name: Test ${{ matrix.boot }}
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ matrix.boot == 'install' && 150 || 30 }}
+    timeout-minutes: ${{ startsWith(matrix.boot, 'install') && 180 || 30 }}
     strategy:
       fail-fast: false
       matrix:
-        boot: [uefi, bios, install]
+        boot: [uefi, bios, install, install-crypt]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -121,7 +122,7 @@ jobs:
 
       # Die virtuelle Festplatte des Installationstests wird ca. 15 GiB groß
       - name: Platz schaffen
-        if: matrix.boot == 'install'
+        if: startsWith(matrix.boot, 'install')
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
           df -h /
@@ -140,10 +141,14 @@ jobs:
 
       - name: Starten und Checkliste prüfen
         run: |
-          flag=""
-          [[ "${{ matrix.boot }}" != uefi ]] && flag="--${{ matrix.boot }}"
+          case "${{ matrix.boot }}" in
+            uefi)          flags=() ;;
+            bios)          flags=(--bios) ;;
+            install)       flags=(--install) ;;
+            install-crypt) flags=(--install --encrypt) ;;
+          esac
           set +e
-          scripts/boot-test.py $flag --out boot-test out/kairo-*-x86_64.iso
+          scripts/boot-test.py "${flags[@]}" --out boot-test out/kairo-*-x86_64.iso
           rc=$?
           cat boot-test/summary.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null
           exit $rc

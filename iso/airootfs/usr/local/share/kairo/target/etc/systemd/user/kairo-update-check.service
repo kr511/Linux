@@ -1,0 +1,8 @@
+# Prüft auf Updates und zeigt bei Bedarf eine Benachrichtigung
+[Unit]
+Description=Kairo: nach Updates suchen
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kairo-update --check

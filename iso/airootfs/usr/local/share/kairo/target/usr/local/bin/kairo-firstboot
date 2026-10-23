@@ -16,11 +16,13 @@ while read -r app; do
     flatpak install --system --noninteractive --assumeyes flathub "${app}" || failed=1
 done < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' /usr/local/share/kairo/flatpaks.target | awk NF)
 
-# KI-Assistenten fürs Terminal: Befehle "claude" und "codex"
-for pkg in @anthropic-ai/claude-code @openai/codex; do
-    echo "==> npm: ${pkg}"
-    npm install --global "${pkg}" || failed=1
-done
+# Claude Code gibt es nur über npm (Codex kommt als Arch-Paket openai-codex).
+# npm meldet auch dann Erfolg, wenn das passende Teilpaket für Linux fehlt,
+# darum prüfen, ob "claude" wirklich startet.
+echo "==> npm: @anthropic-ai/claude-code"
+if ! npm install --global @anthropic-ai/claude-code || ! claude --version; then
+    failed=1
+fi
 
 if (( failed )); then
     echo "Nicht alles hat geklappt, nächster Versuch beim nächsten Start." >&2

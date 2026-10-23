@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Führt das eigentliche Update aus (als root, gestartet von kairo-update).
+# Ausgabe-Format für die Fortschrittsanzeige: "==> Text", "@@PROGRESS Zahl".
+
+set -euo pipefail
+
+(( EUID == 0 )) || { echo "Bitte über kairo-update starten." >&2; exit 1; }
+
+kernel_before="$(pacman -Q linux-zen 2>/dev/null || true)"
+
+echo "@@PROGRESS 5"
+echo "==> Systemupdate (Snapshot wird automatisch angelegt)"
+pacman -Syu --noconfirm
+echo "@@PROGRESS 70"
+
+echo "==> App-Updates (Flatpak)"
+flatpak update --system --noninteractive --assumeyes
+echo "@@PROGRESS 90"
+
+echo "==> Claude Code"
+npm update --global @anthropic-ai/claude-code || true
+
+if [[ "$(pacman -Q linux-zen 2>/dev/null || true)" != "${kernel_before}" ]]; then
+    touch /run/reboot-required-kairo
+fi
+echo "@@PROGRESS 100"
+echo "==> Fertig"
