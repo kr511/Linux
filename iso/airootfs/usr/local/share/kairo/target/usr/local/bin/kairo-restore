@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# Kairo Wiederherstellen: Fenster zum Zurücksetzen auf einen Snapshot.
+# Die Arbeit macht kairo-rollback (als root über pkexec).
+
+set -uo pipefail
+
+title="Kairo Wiederherstellen"
+icon=kairo-logo
+
+mapfile -t rows < <(pkexec /usr/local/bin/kairo-rollback --list)
+if (( ${#rows[@]} == 0 )); then
+    zenity --info --title="${title}" --icon="${icon}" --width=380 \
+        --text="Es gibt noch keine Snapshots. Sie entstehen automatisch bei jedem Update."
+    exit 0
+fi
+
+args=()
+for row in "${rows[@]}"; do
+    IFS=$'\t' read -r num date type desc <<<"${row}"
+    args+=(FALSE "${num}" "${date}" "${type}" "${desc}")
+done
+
+num="$(zenity --list --radiolist --title="${title}" --width=720 --height=460 \
+    --text="Auf welchen Stand soll Kairo zurück? Deine Dateien (Dokumente, Bilder, Spielstände) bleiben, nur das System wird zurückgesetzt.\n\n<b>vor Update</b> = der Stand direkt vor einem Update." \
+    --column="" --column="Nr." --column="Datum" --column="Art" --column="Beschreibung" \
+    --print-column=2 --ok-label="Wiederherstellen" "${args[@]}")" || exit 0
+[[ -n "${num}" ]] || exit 0
+
+zenity --question --title="${title}" --icon="${icon}" --width=420 \
+    --ok-label="Ja, zurücksetzen" --cancel-label="Abbrechen" \
+    --text="Kairo auf Snapshot ${num} zurücksetzen?\n\nDanach ist ein Neustart nötig. Der jetzige Stand wird aufgehoben." \
+    || exit 0
+
+log="$(mktemp -t kairo-restore.XXXXXX.log)"
+if pkexec /usr/local/bin/kairo-rollback --yes "${num}" >"${log}" 2>&1; then
+    zenity --question --title="${title}" --icon="${icon}" --width=380 \
+        --ok-label="Jetzt neu starten" --cancel-label="Später" \
+        --text="Fertig. Nach dem Neustart läuft Kairo im Zustand von Snapshot ${num}." \
+        && systemctl reboot
+else
+    zenity --text-info --title="${title}: Fehler" --width=700 --height=450 --filename="${log}"
+fi

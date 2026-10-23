@@ -50,6 +50,17 @@ noto-fonts-emoji
 noto-fonts-cjk
 ttf-liberation
 
+# --- Snapshots, Verschlüsselung, Boot-Animation, Kairo-Apps -------------------------
+btrfs-progs
+snapper
+# Snapshot vor und nach jedem pacman-Lauf
+snap-pac
+cryptsetup
+plymouth
+# Fenster und Benachrichtigungen für Kairo Update / Wiederherstellen
+zenity
+libnotify
+
 # --- Optimierung -------------------------------------------------------------------
 # Komprimierter Arbeitsspeicher als Swap (statt Swap-Datei)
 zram-generator

@@ -63,6 +63,10 @@ cp -a -- "${base_dir}/." "${out_dir}/"
 info "Lege Kairo-Overlay iso/airootfs/ darüber"
 cp -a -- "${iso_dir}/airootfs/." "${out_dir}/airootfs/"
 
+# Bootmenü-Hintergrund im BIOS-Modus (Kairo-Logo statt Arch-Logo)
+info "Lege Kairo-Dateien iso/syslinux/ über syslinux/"
+cp -a -- "${iso_dir}/syslinux/." "${out_dir}/syslinux/"
+
 # --- 3. profiledef.sh: Kairo-Werte anhängen ------------------------------------
 info "Hänge iso/profiledef.kairo.sh an profiledef.sh an"
 {
@@ -86,6 +90,8 @@ while IFS= read -r -d '' f; do
         -e 's/Arch Linux install medium/Kairo OS Live/g' \
         -e 's/Arch Linux live medium/Kairo OS Live/g' \
         -e 's/^MENU TITLE Arch Linux$/MENU TITLE Kairo OS/' \
+        -e 's/#9033ccff/#ff4cc38a/' \
+        -e 's/It allows you to install Arch Linux or perform system maintenance\./Startet Kairo vom USB-Stick, von dort kannst du Kairo installieren./' \
         -- "$f"
 done < <(find "${out_dir}/efiboot" "${out_dir}/syslinux" "${out_dir}/grub" \
               -type f \( -name '*.conf' -o -name '*.cfg' \) -print0 2>/dev/null)

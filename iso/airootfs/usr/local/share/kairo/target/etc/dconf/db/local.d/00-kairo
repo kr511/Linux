@@ -9,6 +9,7 @@ sources=[('xkb', 'de')]
 
 [org/gnome/desktop/interface]
 color-scheme='prefer-dark'
+accent-color='green'
 
 [org/gnome/desktop/wm/preferences]
 button-layout='appmenu:minimize,maximize,close'
@@ -16,3 +17,12 @@ button-layout='appmenu:minimize,maximize,close'
 # Variable Bildwiederholrate (FreeSync) für AMD-Grafik und passende Monitore
 [org/gnome/mutter]
 experimental-features=['variable-refresh-rate']
+
+[org/gnome/desktop/background]
+picture-uri='file:///usr/local/share/kairo/branding/wallpaper.png'
+picture-uri-dark='file:///usr/local/share/kairo/branding/wallpaper.png'
+primary-color='#121514'
+
+[org/gnome/desktop/screensaver]
+picture-uri='file:///usr/local/share/kairo/branding/wallpaper.png'
+primary-color='#121514'

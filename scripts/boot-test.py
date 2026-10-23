@@ -11,12 +11,13 @@ Live-Test (Standard), wie docs/05-checkliste, Teil C und D:
      eintippen, ihre Ausgabe über /dev/ttyS0 (serial.log) mitlesen
   4. poweroff tippen und prüfen, ob die VM sauber herunterfährt
 
-Installationstest (--install), nur UEFI:
+Installationstest (--install [--encrypt]), nur UEFI:
   1. ISO plus leere virtuelle Festplatte (40 GiB) starten
   2. kairo-install ohne Rückfragen laufen lassen (KAIRO_SELFTEST=1)
   3. Von der Festplatte starten. Dort meldet kairo-selftest nach dem
-     ersten Start (inkl. Nachladen der Flatpaks) alles über /dev/ttyS0
-     und schaltet die VM aus
+     ersten Start (inkl. Nachladen der Flatpaks) alles über /dev/ttyS0,
+     testet dann kairo-rollback und startet neu
+  4. Dritter Start: Ist das System wirklich zurückgesetzt?
 
 Ergebnis: Screenshots (*.png), serial*.log und summary.md im Ausgabeordner.
 Exit-Code 0 nur, wenn alle Prüfungen bestanden sind.
@@ -60,9 +61,12 @@ CHECK_CMD = (
     "fastfetch --pipe --logo none; echo '===END'; } 2>&1 | tee /dev/ttyS0"
 )
 
-# Nur für den Installationstest: Festplatte /dev/vda, Testbenutzer
+# Nur für den Installationstest: Festplatte /dev/vda, Testbenutzer.
+# Mit --encrypt kommt KAIRO_ENCRYPT dazu (beim Start entsperrt eine
+# Schlüsseldatei, die kairo-install nur im Testmodus anlegt).
 INSTALL_CMD = ("KAIRO_DISK=/dev/vda KAIRO_USER=tester KAIRO_PASSWORD=kairotest "
                "KAIRO_YES=1 KAIRO_SELFTEST=1 kairo-install")
+INSTALL_CMD_CRYPT = "KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD=kairotest1 " + INSTALL_CMD
 
 # Tastenbelegung US (Standard der Live-Konsole): Zeichen -> QEMU-Tastencode
 KEYS = {" ": "spc", "-": "minus", "=": "equal", "/": "slash", ".": "dot",
@@ -238,12 +242,12 @@ def evaluate_live(output, boot, powered_off):
     checks = [
         ("Login als root, Hostname kairo (Prompt root@kairo)",
          has(output, r"^root\s*$") and has(output, r"^kairo\s*$")),
-        ('Begrüßung "Willkommen bei Kairo OS 0.2"', has(output, r"Willkommen bei Kairo OS 0\.2")),
+        ('Begrüßung "Willkommen bei Kairo OS 1.0"', has(output, r"Willkommen bei Kairo OS 1\.0")),
         ('os-release: NAME="Kairo OS"', has(output, r'^NAME="Kairo OS"')),
         ("os-release: ID=kairo", has(output, r"^ID=\"?kairo\"?\s*$")),
         ("os-release: ID_LIKE=arch", has(output, r"^ID_LIKE=\"?arch\"?\s*$")),
-        ("os-release: IMAGE_VERSION=0.2-<datum>",
-         has(output, r"^IMAGE_VERSION=\"?0\.2-\d{4}\.\d\d\.\d\d")),
+        ("os-release: IMAGE_VERSION=1.0-<datum>",
+         has(output, r"^IMAGE_VERSION=\"?1\.0-\d{4}\.\d\d\.\d\d")),
         ("hostnamectl: Static hostname: kairo", has(output, r"Static hostname: kairo\b")),
         ("hostnamectl: Operating System: Kairo OS", has(output, r"Operating System: Kairo OS")),
         # GitHub-Runner (Azure) lassen kein ICMP nach außen durch, ping bekommt
@@ -266,12 +270,15 @@ def evaluate_live(output, boot, powered_off):
     return checks
 
 
-def evaluate_install(installed, output, powered_off):
-    """Prüft, was kairo-selftest nach dem ersten Start gemeldet hat."""
+def evaluate_install(installed, output, rollback, powered_off, encrypt):
+    """Prüft, was kairo-selftest beim ersten und zweiten Start gemeldet hat."""
     pkgs = ["steam", "discord", "firefox", "chromium", "gnome-shell", "amd-ucode",
-            "vulkan-radeon", "lib32-vulkan-radeon", "gamemode", "mangohud"]
+            "vulkan-radeon", "lib32-vulkan-radeon", "gamemode", "mangohud",
+            "snapper", "snap-pac", "plymouth"]
     flatpaks = re.search(r"^FLATPAKS:(.*)$", output, re.MULTILINE)
     flatpaks = flatpaks.group(1) if flatpaks else ""
+    mounts = re.search(r"^MOUNTS:(.*)$", output, re.MULTILINE)
+    mounts = mounts.group(1).split() if mounts else []
     checks = [
         ("kairo-install ist durchgelaufen", installed),
         ("Startet von der Festplatte mit systemd-boot", has(output, r"Product: systemd-boot")),
@@ -288,12 +295,29 @@ def evaluate_install(installed, output, powered_off):
         ("Codex installiert", has(output, r"^CODEX=/\S+")),
         ("Web-Apps Claude und ChatGPT im Menü",
          has(output, r"^kairo-claude\.desktop") and has(output, r"^kairo-chatgpt\.desktop")),
+        ("Apps Kairo Update und Kairo Wiederherstellen im Menü",
+         has(output, r"^kairo-update\.desktop") and has(output, r"^kairo-restore\.desktop")),
+        ("Kairo Update: tägliche Prüfung aktiv", has(output, r"^UPDATE_TIMER=enabled")),
+        # checkupdates: 0 = Updates da, 2 = keine, 1 = Fehler
+        ("Kairo Update: Updateprüfung funktioniert", has(output, r"^UPDATE_CHECK=[02]\s*$")),
+        ("Kairo-Design installiert (Hintergrund, Logo)",
+         has(output, r"^LOGO:.*\bwallpaper\.png") and has(output, r"^LOGO:.*\bgdm-logo\.png")),
+        ("Boot-Animation: Theme kairo, splash aktiv", has(output, r"^PLYMOUTH=kairo .*\bsplash\b")),
+        ("Btrfs, System auf Subvolume @", has(output, r"^ROOTFS=btrfs subvol=/@\s*$")),
+        ("Eigene Subvolumes für /home, /.snapshots, /var/log",
+         all(m in mounts for m in ["/home", "/.snapshots", "/var/log"])),
+        ("Snapshot der frischen Installation vorhanden", has(output, r"^SNAPSHOTS=[1-9]")),
+        (("Festplatte verschlüsselt (LUKS)", has(output, r"^CRYPT=1\s*$")) if encrypt else
+         ("Keine Verschlüsselung (wie gewählt)", has(output, r"^CRYPT=0\s*$"))),
         ("zram-Swap aktiv", has(output, r"^SWAP:.*zram")),
         ("multilib (32 Bit für Steam) aktiv", has(output, r"^MULTILIB=an")),
         ("Sprache Deutsch, Tastatur deutsch",
          has(output, r"^LANG=de_DE\.UTF-8") and has(output, r"^KEYMAP=de-latin1")),
         ("Hostname kairo", has(output, r"^kairo\s*$")),
         ("Benutzer ist Administrator (wheel)", has(output, r"^GRUPPEN:.*\bwheel\b")),
+        ("Zurückrollen: Änderung nach dem Snapshot ist wieder weg",
+         has(rollback, r"^ROLLBACK_MARKER=weg")),
+        ("Nach dem Zurückrollen startet der Desktop", has(rollback, r"^GDM=active")),
         ("VM fährt nach dem Test sauber herunter", powered_off),
     ]
     return checks
@@ -382,7 +406,7 @@ def run_install(args, tmp):
         time.sleep(2)
 
         log("Starte kairo-install (ohne Rückfragen)")
-        vm.qmp.type(INSTALL_CMD + "\n")
+        vm.qmp.type((INSTALL_CMD_CRYPT if args.encrypt else INSTALL_CMD) + "\n")
         started = time.monotonic()
         result = None
         while result is None and time.monotonic() - started < args.install_timeout:
@@ -402,32 +426,51 @@ def run_install(args, tmp):
     finally:
         vm.kill()
 
+    title = f"Installationstest{' mit Verschlüsselung' if args.encrypt else ''}: `{args.iso.name}`"
     if not installed:
-        write_summary(args.out, f"Installationstest: `{args.iso.name}`",
-                      evaluate_install(False, "", False))
+        write_summary(args.out, title, evaluate_install(False, "", "", False, args.encrypt))
         return False
 
     # --- Phase 2: ohne USB-Stick von der Festplatte starten -------------------
+    # kairo-selftest wartet auf kairo-firstboot (Flatpaks laden), meldet alles,
+    # testet dann das Zurückrollen und startet neu (QEMU beendet sich dabei)
     serial2 = args.out / "serial-erster-start.log"
     log("Starte installiertes Kairo von der Festplatte (erster Start)")
     vm = Vm(tmp, serial2, disk=disk)
-    powered_off = False
     try:
-        time.sleep(8)
+        time.sleep(4)
         vm.qmp.screenshot(args.out / "install-4-bootmenue.png")
-        # kairo-selftest wartet auf kairo-firstboot (Flatpaks laden)
+        time.sleep(6)
+        vm.qmp.screenshot(args.out / "install-4-boot-animation.png")
         if wait_for(serial2, "===SELFTEST_END", args.install_timeout):
             vm.qmp.screenshot(args.out / "install-5-anmeldung.png")
         else:
             vm.qmp.screenshot(args.out / "install-5-timeout.png")
             log("FEHLER: Selbsttest nicht rechtzeitig fertig")
+        if not vm.wait_exit(600):
+            log("FEHLER: Kein Neustart nach dem Zurückrollen")
+    finally:
+        vm.kill()
+
+    # --- Phase 3: nach dem Zurückrollen ---------------------------------------
+    serial3 = args.out / "serial-nach-rollback.log"
+    log("Starte Kairo nach dem Zurückrollen")
+    vm = Vm(tmp, serial3, disk=disk)
+    powered_off = False
+    try:
+        if wait_for(serial3, "===ROLLBACK_END", 900):
+            vm.qmp.screenshot(args.out / "install-6-nach-rollback.png")
+        else:
+            vm.qmp.screenshot(args.out / "install-6-timeout.png")
+            log("FEHLER: Kein Ergebnis nach dem Zurückrollen")
         powered_off = vm.wait_exit(180)
     finally:
         vm.kill()
 
-    checks = evaluate_install(True, section(serial2, "===SELFTEST_BEGIN", "===SELFTEST_END"),
-                              powered_off)
-    return write_summary(args.out, f"Installationstest: `{args.iso.name}`", checks)
+    checks = evaluate_install(
+        True, section(serial2, "===SELFTEST_BEGIN", "===SELFTEST_END"),
+        section(serial3, "===ROLLBACK_BEGIN", "===ROLLBACK_END"), powered_off, args.encrypt)
+    return write_summary(args.out, title, checks)
 
 
 def main():
@@ -437,6 +480,8 @@ def main():
     mode.add_argument("--bios", action="store_true", help="Live-Test im BIOS- statt UEFI-Modus")
     mode.add_argument("--install", action="store_true",
                       help="Installationstest auf virtueller Festplatte (UEFI)")
+    ap.add_argument("--encrypt", action="store_true",
+                    help="mit --install: mit Verschlüsselung installieren")
     ap.add_argument("--out", type=Path, default=Path("boot-test"))
     ap.add_argument("--boot-timeout", type=int, default=600,
                     help="Sekunden bis zur Konsole (ohne KVM deutlich mehr nötig)")
@@ -444,6 +489,8 @@ def main():
                     help="Sekunden für Installation bzw. ersten Start")
     args = ap.parse_args()
 
+    if args.encrypt and not args.install:
+        ap.error("--encrypt geht nur zusammen mit --install")
     if not args.iso.is_file():
         sys.exit(f"FEHLER: ISO nicht gefunden: {args.iso}")
     args.out.mkdir(parents=True, exist_ok=True)

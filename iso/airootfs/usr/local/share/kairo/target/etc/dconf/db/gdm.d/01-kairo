@@ -1,0 +1,3 @@
+# Anmeldebildschirm (GDM): Kairo-Schriftzug statt Arch-Logo
+[org/gnome/login-screen]
+logo='/usr/local/share/kairo/branding/gdm-logo.png'

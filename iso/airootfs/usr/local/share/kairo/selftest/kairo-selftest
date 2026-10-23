@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
-# NUR für den automatischen Installationstest. Gegenstück: scripts/install-test.py
+# NUR für den automatischen Installationstest. Gegenstück: scripts/boot-test.py
+#
+# Erster Start:  Prüfungen ausgeben, dann das Zurückrollen testen:
+#                Snapshot anlegen, danach eine Markierungsdatei in /etc,
+#                kairo-rollback auf den Snapshot, Neustart.
+# Zweiter Start: Ist die Markierung weg, hat das Zurückrollen geklappt.
+#
+# Der Zwischenstand liegt in /var/log (eigenes Subvolume @var_log), das beim
+# Zurückrollen bewusst NICHT zurückgesetzt wird.
+
+stage_file=/var/log/kairo-selftest-stage
+marker=/etc/kairo-rollback-marker
 
 # GNOME braucht nach dem Start ein paar Sekunden
 for _ in $(seq 60); do
@@ -7,6 +18,20 @@ for _ in $(seq 60); do
     sleep 2
 done
 sleep 10
+
+if [[ "$(cat "${stage_file}" 2>/dev/null)" == rollback ]]; then
+    {
+        echo '===ROLLBACK_BEGIN'
+        if [[ -e "${marker}" ]]; then echo "ROLLBACK_MARKER=da"; else echo "ROLLBACK_MARKER=weg"; fi
+        echo "GDM=$(systemctl is-active gdm)"
+        echo "ROOT=$(findmnt -no SOURCE /)"
+        echo '===ROLLBACK_END'
+    } > /dev/ttyS0 2>&1
+    rm -f "${stage_file}"
+    sleep 20
+    systemctl poweroff
+    exit 0
+fi
 
 {
     echo '===SELFTEST_BEGIN'
@@ -16,7 +41,8 @@ sleep 10
     echo "NM=$(systemctl is-active NetworkManager)"
     echo "FIRSTBOOT_DONE=$(test -e /var/lib/kairo/firstboot-done && echo ja || echo nein)"
     pacman -Q steam discord firefox chromium gnome-shell linux-zen amd-ucode \
-        vulkan-radeon lib32-vulkan-radeon gamemode mangohud zram-generator
+        vulkan-radeon lib32-vulkan-radeon gamemode mangohud zram-generator \
+        snapper snap-pac plymouth
     echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
     echo "CLAUDE=$(command -v claude)"
     echo "CODEX=$(command -v codex)"
@@ -25,10 +51,30 @@ sleep 10
     cat /etc/locale.conf /etc/vconsole.conf /etc/hostname
     echo "GRUPPEN: $(id -nG tester)"
     bootctl status 2>/dev/null | grep -E 'Product:|Firmware:'
+    echo "ROOTFS=$(findmnt -no FSTYPE /) $(findmnt -no OPTIONS / | grep -o 'subvol=[^,]*')"
+    echo "MOUNTS: $(findmnt -rno TARGET -t btrfs | tr '\n' ' ')"
+    echo "CRYPT=$(lsblk -rno TYPE | grep -c '^crypt$')"
+    echo "SNAPSHOTS=$(snapper --no-dbus -c root list --columns number | grep -cE '^ *[1-9]')"
+    echo "PLYMOUTH=$(sed -n 's/^Theme=//p' /etc/plymouth/plymouthd.conf) $(cat /proc/cmdline)"
+    echo "UPDATE_TIMER=$(systemctl --global is-enabled kairo-update-check.timer)"
+    echo "UPDATE_CHECK=$(sudo -u tester checkupdates >/dev/null 2>&1; echo $?)"
+    echo "LOGO: $(find /usr/local/share/kairo/branding/ -maxdepth 1 -type f -printf '%f ')"
     ls /usr/local/share/applications/
     echo '===SELFTEST_END'
 } > /dev/ttyS0 2>&1
 
-# Zeit für den Screenshot des Anmeldebildschirms, dann aus
+# Zeit für den Screenshot des Anmeldebildschirms
 sleep 30
-systemctl poweroff
+
+# --- Zurückrollen testen ---------------------------------------------------------
+{
+    echo '===ROLLBACK_TEST'
+    num="$(snapper --no-dbus -c root create -d "Selbsttest vor Rollback" --print-number)"
+    echo "SNAPSHOT=${num}"
+    echo "Diese Datei muss nach dem Zurückrollen weg sein" > "${marker}"
+    echo rollback > "${stage_file}"
+    sync
+    kairo-rollback --yes "${num}"
+    echo "ROLLBACK_EXIT=$?"
+} > /dev/ttyS0 2>&1
+systemctl reboot

@@ -2,7 +2,7 @@
 Type=Application
 Name=Kairo installieren
 Comment=Kairo OS auf die Festplatte installieren
-Exec=kgx --title "Kairo installieren" -- sudo /usr/local/bin/kairo-install
-Icon=system-software-install
+Exec=/usr/local/bin/kairo-install-gui
+Icon=kairo-logo
 Terminal=false
 Categories=System;

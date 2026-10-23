@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kairo Wiederherstellen
+Comment=Kairo auf einen früheren Stand zurücksetzen
+Exec=/usr/local/bin/kairo-restore
+Icon=document-revert
+Terminal=false
+Categories=System;Settings;

@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#
+# Kairo Update: zeigt verfügbare Updates und installiert sie mit einem Klick.
+#
+#   kairo-update          Fenster (App "Kairo Update")
+#   kairo-update --check  nur prüfen, bei Updates eine Benachrichtigung zeigen
+#                         (läuft täglich über kairo-update-check.timer)
+#
+# Installiert wird von kairo-update-root (als root über pkexec). Vor jedem
+# Systemupdate legt snap-pac automatisch einen Snapshot an, zurück geht es
+# mit "Kairo Wiederherstellen".
+
+set -uo pipefail
+
+title="Kairo Update"
+icon=kairo-logo
+
+# Systemupdates: checkupdates nutzt eine eigene Kopie der Paketdatenbank,
+# braucht kein root und verändert nichts
+count_system() { checkupdates 2>/dev/null | wc -l; }
+count_apps()   { flatpak remote-ls --updates --system --columns=application 2>/dev/null | grep -c . ; }
+
+if [[ "${1:-}" == --check ]]; then
+    sys="$(count_system)" apps="$(count_apps)"
+    total=$(( sys + apps ))
+    (( total > 0 )) || exit 0
+    action="$(notify-send --app-name="${title}" --icon="${icon}" --wait \
+        --action=open=Aktualisieren "Updates verfügbar" \
+        "${sys} Systemupdates, ${apps} App-Updates")"
+    [[ "${action}" == open ]] && exec "$0"
+    exit 0
+fi
+
+sys="$(count_system)" apps="$(count_apps)"
+if (( sys + apps == 0 )); then
+    zenity --info --title="${title}" --icon="${icon}" --width=360 \
+        --text="Kairo ist auf dem neuesten Stand."
+    exit 0
+fi
+
+zenity --question --title="${title}" --icon="${icon}" --width=420 \
+    --ok-label="Jetzt aktualisieren" --cancel-label="Später" \
+    --text="<b>Updates verfügbar</b>\n\n${sys} Systemupdates\n${apps} App-Updates (Flatpak)\n\nVor dem Update wird automatisch ein Snapshot angelegt. Geht etwas schief, hilft \"Kairo Wiederherstellen\"." \
+    || exit 0
+
+log="$(mktemp -t kairo-update.XXXXXX.log)"
+# Ausgabe: "# Text" setzt die Beschriftung, Zahlen den Fortschritt
+pkexec /usr/local/bin/kairo-update-root 2>&1 | tee "${log}" \
+    | sed -u -n -e 's/^==> \(.*\)/# \1/p' -e 's/^@@PROGRESS \([0-9]*\)$/\1/p' \
+    | zenity --progress --title="${title}" --width=420 --auto-close --no-cancel \
+        --text="Starte Update ..."
+status="${PIPESTATUS[0]}"
+
+if (( status == 0 )); then
+    if [[ -e /run/reboot-required-kairo ]]; then
+        zenity --question --title="${title}" --icon="${icon}" --width=380 \
+            --ok-label="Neu starten" --cancel-label="Später" \
+            --text="Update fertig. Ein neuer Kernel wurde installiert, bitte neu starten." \
+            && systemctl reboot
+    else
+        zenity --info --title="${title}" --icon="${icon}" --width=360 --text="Update fertig."
+    fi
+elif (( status == 126 || status == 127 )); then
+    # pkexec: Passwort-Abfrage abgebrochen
+    exit 0
+else
+    zenity --text-info --title="${title}: Fehler" --width=700 --height=450 --filename="${log}"
+fi
