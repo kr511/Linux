@@ -36,9 +36,9 @@ keinen Mehrwert.
 | Version | Ziel | Fertig, wenn ... |
 | --- | --- | --- |
 | 0.1 ✅ | Live-ISO mit Kairo-Branding, offizieller Arch-Kernel | ISO bootet in QEMU (UEFI), siehe [Checkliste](05-checkliste-kairo-0.1.md) |
-| **0.2** | GNOME-Live-System, Installer `kairo-install`, Gaming-Apps, AMD-Optimierung (Kernel `linux-zen`) | Installationstest in der CI grün, dann auf deinem PC, siehe [06: Installieren](06-installieren.md) |
-| 0.3 | `linux-kairo` einzeln gebaut und getestet | Kernel bootet in einer VM |
-| 0.4 | `linux-kairo` im installierten System | Kernel bootet auf deinem PC |
+| 0.2 | GNOME-Live-System, Installer `kairo-install`, Gaming-Apps, AMD-Optimierung (Kernel `linux-zen`) | Live-Test grün, Installation siehe 1.0 |
+| **1.0** | Kairo-Design, Btrfs-Snapshots + Zurückrollen, Verschlüsselung, grafischer Installer, Kairo Update | Installationstest (mit und ohne Verschlüsselung, inkl. Zurückrollen) grün, dann auf deinem PC, siehe [06: Installieren](06-installieren.md) |
+| später | `linux-kairo` (eigener Kernel) | Kernel bootet in einer VM, dann auf deinem PC |
 
 Immer nur **eine** neue Unbekannte pro Schritt. Wenn ISO und Kernel gleichzeitig
 neu sind und es nicht bootet, weißt du nicht, wer schuld ist.

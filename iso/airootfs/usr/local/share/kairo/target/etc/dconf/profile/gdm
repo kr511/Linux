@@ -1,0 +1,5 @@
+# Profil des Anmeldebildschirms (GDM). Ohne diese Datei liest GDM nur seine
+# eingebauten Voreinstellungen und ignoriert /etc/dconf/db/gdm.d/ (Logo).
+user-db:user
+system-db:gdm
+file-db:/usr/share/gdm/greeter-dconf-defaults
