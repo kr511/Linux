@@ -28,6 +28,7 @@ iso_version="1.0-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 # (+= ergänzt die Liste aus releng, statt sie zu ersetzen)
 file_permissions+=(
   ["/etc/sudoers.d/kairo-live"]="0:0:440"
+  ["/usr/local/bin/kairo-hwcheck"]="0:0:755"
   ["/usr/local/bin/kairo-install"]="0:0:755"
   ["/usr/local/bin/kairo-install-gui"]="0:0:755"
   ["/usr/local/bin/kairo-rollback"]="0:0:755"

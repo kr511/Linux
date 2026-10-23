@@ -1,23 +1,26 @@
 # Kairo OS
 
 Kairo OS ist eine eigene, bootfähige x86_64-Linux-Distribution auf Basis von
-Arch Linux. Langfristiges Ziel: eigene Live-ISO, eigener Kernel `linux-kairo`
-und eine von Omarchy/Hyprland inspirierte Desktopumgebung.
+Arch Linux: fertig eingerichtet zum Spielen und Arbeiten, mit Live-ISO,
+Installer und eigenem Design. Später: eigener Kernel `linux-kairo`.
 
-> **Stand:** Kairo 1.0 (in Arbeit): grafischer Installer, Snapshots mit
-> Zurückrollen, optionale Verschlüsselung, Kairo Update, eigenes Design.
-> GNOME-Live-System mit Steam, Roblox
-> (Sober), Discord, Spotify, VS Code, Claude/ChatGPT, Claude Code und Codex
-> im Terminal, optimiert für AMD.
-> Installieren: [`docs/06-installieren.md`](docs/06-installieren.md). Was davon wirklich gebaut und getestet
-> wurde, steht **nur** in [`STATUS.md`](STATUS.md). Alles andere gilt als
-> "vorbereitet, aber ungetestet".
+> **Stand:** Kairo 1.0. GNOME im Kairo-Design mit grafischem Installer,
+> Snapshots und Zurückrollen, optionaler Verschlüsselung und Kairo Update.
+> Dabei: Steam, Roblox (Sober), Discord, Spotify, VS Code, Claude/ChatGPT,
+> Claude Code und Codex im Terminal, eingestellt für AMD.
+>
+> **Download:** https://github.com/kr511/Linux/releases/latest ·
+> **Installieren:** [`docs/06-installieren.md`](docs/06-installieren.md)
+>
+> Was davon wirklich gebaut und getestet wurde, steht **nur** in
+> [`STATUS.md`](STATUS.md).
 
 ## Aufbau
 
 | Ordner | Inhalt |
 | --- | --- |
-| [`iso/`](iso/) | Kairo-Anpassungen für das offizielle Archiso-Profil `releng` |
+| [`iso/`](iso/) | Kairo-Anpassungen für das offizielle Archiso-Profil `releng`, Installer und Kairo-Apps |
+| [`branding/`](branding/) | Logo, Schriftzug, Hintergrund (SVG), daraus erzeugt `scripts/render-branding.sh` die Bilder |
 | [`kernel/`](kernel/) | `linux-kairo`: PKGBUILD, Kernel-Konfiguration, dokumentierte Patches |
 | [`desktop/`](desktop/) | Platzhalter (der GNOME-Desktop steckt in `iso/airootfs/`) |
 | [`packages/`](packages/) | Platzhalter für eigene Pakete |

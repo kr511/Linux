@@ -58,7 +58,7 @@ CHECK_CMD = (
     "echo GDM=$(systemctl is-active gdm); echo NM=$(systemctl is-active NetworkManager); "
     "echo LIVEUSER=$(id -nG kairo); loginctl list-sessions --no-legend; "
     "echo GDM_LOGO=$(DCONF_PROFILE=gdm dconf read /org/gnome/login-screen/logo); "
-    "test -x /usr/local/bin/kairo-install && echo INSTALLER=ok; "
+    "test -x /usr/local/bin/kairo-install && echo INSTALLER=ok; kairo-hwcheck --text; "
     "fastfetch --pipe --logo none; echo '===END'; } 2>&1 | tee /dev/ttyS0"
 )
 
@@ -266,6 +266,9 @@ def evaluate_live(output, boot, powered_off):
         ("Live-Benutzer kairo ist Administrator (wheel)", has(output, r"^LIVEUSER=.*\bwheel\b")),
         ("Netzwerk: NetworkManager läuft (WLAN im Desktop)", has(output, r"^NM=active")),
         ("Installer kairo-install vorhanden", has(output, r"^INSTALLER=ok")),
+        ("Hardware prüfen: erkennt Grafik, Prozessor, Internet",
+         has(output, r"^\w+\|Grafik\|") and has(output, r"^OK\|Prozessor\|")
+         and has(output, r"^OK\|Internet\|")),
         ("Anmeldebildschirm zeigt das Kairo-Logo",
          has(output, r"^GDM_LOGO='/usr/local/share/kairo/branding/gdm-logo\.png'")),
         ('fastfetch zeigt "Kairo OS"', has(output, r"OS: Kairo OS")),
@@ -275,6 +278,7 @@ def evaluate_live(output, boot, powered_off):
     ]
     if boot == "uefi":
         checks.insert(8, ("bootctl status: Firmware: UEFI", has(output, r"Firmware: UEFI")))
+        checks.insert(9, ("Hardware prüfen: erkennt UEFI", has(output, r"^OK\|Start-Modus\|UEFI")))
     return checks
 
 
@@ -306,8 +310,10 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
          and has(output, r"^CODEX_VERSION=\S*\s*\d+\.\d+")),
         ("Web-Apps Claude und ChatGPT im Menü",
          has(output, r"^kairo-claude\.desktop") and has(output, r"^kairo-chatgpt\.desktop")),
-        ("Apps Kairo Update und Kairo Wiederherstellen im Menü",
-         has(output, r"^kairo-update\.desktop") and has(output, r"^kairo-restore\.desktop")),
+        ("Apps Kairo Update, Wiederherstellen und Willkommen im Menü",
+         has(output, r"^kairo-update\.desktop") and has(output, r"^kairo-restore\.desktop")
+         and has(output, r"^kairo-start\.desktop")),
+        ("Willkommens-App startet beim ersten Anmelden", has(output, r"^AUTOSTART=kairo-start")),
         ("Kairo Update: tägliche Prüfung aktiv", has(output, r"^UPDATE_TIMER=enabled")),
         # checkupdates: 0 = Updates da, 2 = keine, 1 = Fehler
         ("Kairo Update: Updateprüfung funktioniert", has(output, r"^UPDATE_CHECK=[02]\s*$")),

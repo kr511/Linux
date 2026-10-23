@@ -12,6 +12,20 @@ fastfetch
 # Versionsverwaltung, um im Live-System direkt dieses Repo klonen zu können.
 git
 
+# Firmware einzeln statt "linux-firmware" (siehe packages.remove.x86_64):
+# alles außer NVIDIA und Marvell
+linux-firmware-amd
+linux-firmware-amdgpu
+linux-firmware-atheros
+linux-firmware-broadcom
+linux-firmware-cirrus
+linux-firmware-intel
+linux-firmware-mediatek
+linux-firmware-other
+linux-firmware-radeon
+linux-firmware-realtek
+linux-firmware-ti
+
 # --- Kairo 0.2: GNOME-Desktop im Live-System ---------------------------------
 # Bewusst nicht die ganze Gruppe "gnome" (60 Pakete): Live braucht nur den
 # Desktop, einen Browser, Dateien, ein Terminal für den Installer und WLAN.

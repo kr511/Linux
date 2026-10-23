@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Willkommen bei Kairo
+Comment=Steam, Roblox, Discord, Spiele-Tipps und mehr
+Exec=/usr/local/bin/kairo-start
+Icon=kairo-logo
+Terminal=false
+Categories=System;

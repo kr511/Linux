@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#
+# Kairo Start: Willkommens-App nach dem ersten Anmelden.
+#
+#   kairo-start              Fenster öffnen (App "Willkommen bei Kairo")
+#   kairo-start --autostart  nur beim ersten Anmelden (siehe
+#                            /etc/xdg/autostart/kairo-start.desktop)
+#
+# Mit "Fertig" wird ~/.config/kairo/start-done angelegt, dann öffnet sich
+# das Fenster nicht mehr von selbst. Über das App-Menü geht es immer.
+
+set -uo pipefail
+
+title="Willkommen bei Kairo"
+icon=kairo-logo
+done_file="${XDG_CONFIG_HOME:-${HOME}/.config}/kairo/start-done"
+
+if [[ "${1:-}" == --autostart && -e "${done_file}" ]]; then
+    exit 0
+fi
+
+# Läuft die App (Arch-Paket oder Flatpak) schon?
+have() { command -v "$1" >/dev/null 2>&1; }
+have_flatpak() { flatpak info "$1" >/dev/null 2>&1; }
+
+tips() {
+    zenity --text-info --title="Spiele-Tipps" --width=640 --height=480 --ok-label="Schließen" \
+        --filename=/dev/stdin <<'EOF'
+SPIELEN AUF KAIRO
+
+Steam
+  - Windows-Spiele laufen über Proton. Einschalten: Steam > Einstellungen >
+    Kompatibilität > "Steam Play für alle anderen Titel aktivieren".
+  - Ob ein Spiel läuft: https://www.protondb.com
+
+Startoptionen (Steam: Spiel > Eigenschaften > Startoptionen)
+  gamemoderun %command%     mehr CPU-Leistung, solange das Spiel läuft
+  MANGOHUD=1 %command%      zeigt FPS, CPU- und GPU-Last
+  beides:  gamemoderun env MANGOHUD=1 %command%
+
+Roblox
+  Läuft über Sober (Android-Version von Roblox). Die meisten Spiele gehen,
+  manche mit Anti-Cheat nicht.
+
+Bildschirm
+  FreeSync ist an. In Einstellungen > Bildschirme kannst du die
+  Bildwiederholrate (z. B. 144 Hz) wählen.
+
+Wenn nach einem Update etwas nicht mehr geht
+  "Kairo Wiederherstellen" öffnen und den Stand "vor Update" wählen.
+EOF
+}
+
+while true; do
+    status_text="Schön, dass du da bist, <b>$(getent passwd "${USER}" | cut -d: -f5 | cut -d, -f1)</b>!"
+    if [[ ! -e /var/lib/kairo/firstboot-done ]]; then
+        status_text+="\n\n⏳ Roblox, Spotify, VS Code und Claude Code werden gerade im Hintergrund geladen. Das dauert ein paar Minuten."
+    fi
+
+    rows=()
+    add() { rows+=("$1" "$2" "$3"); }
+    add steam "Steam" "Spiele kaufen und starten, mit Proton auch Windows-Spiele"
+    have_flatpak org.vinegarhq.Sober && add sober "Roblox (Sober)" "Roblox spielen"
+    have discord && add discord "Discord" "Mit Freunden schreiben und reden"
+    have_flatpak com.spotify.Client && add spotify "Spotify" "Musik"
+    add claude "Claude" "KI-Assistent von Anthropic (im Terminal: claude)"
+    add chatgpt "ChatGPT" "KI-Assistent von OpenAI (im Terminal: codex)"
+    add tips "Spiele-Tipps" "Proton, GameMode, FPS-Anzeige, Roblox"
+    add design "Hintergrund und Farben" "Kairo nach deinem Geschmack"
+    add update "Updates prüfen" "Kairo Update öffnen"
+
+    choice="$(zenity --list --title="${title}" --window-icon="${icon}" --width=640 --height=520 \
+        --text="${status_text}" \
+        --column=id --column="Was möchtest du tun?" --column="" --hide-column=1 --print-column=1 \
+        --ok-label="Öffnen" --cancel-label="Fertig" "${rows[@]}")" || break
+
+    case "${choice}" in
+        steam)   steam >/dev/null 2>&1 & ;;
+        sober)   flatpak run org.vinegarhq.Sober >/dev/null 2>&1 & ;;
+        discord) discord >/dev/null 2>&1 & ;;
+        spotify) flatpak run com.spotify.Client >/dev/null 2>&1 & ;;
+        claude)  gtk-launch kairo-claude & ;;
+        chatgpt) gtk-launch kairo-chatgpt & ;;
+        tips)    tips ;;
+        design)  gnome-control-center background >/dev/null 2>&1 & ;;
+        update)  /usr/local/bin/kairo-update & ;;
+    esac
+done
+
+mkdir -p "$(dirname "${done_file}")"
+touch "${done_file}"

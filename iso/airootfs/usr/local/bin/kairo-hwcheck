@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#
+# kairo-hwcheck: prüft im Live-System, ob dein PC zu Kairo passt.
+# Ändert nichts, installiert nichts, braucht kein root.
+#
+#   kairo-hwcheck          Fenster mit Ergebnis (App "Hardware prüfen")
+#   kairo-hwcheck --text   nur Text (Terminal, automatische Tests)
+#
+# Ausgabe im Textmodus, eine Zeile pro Prüfung:
+#   OK|Bereich|Ergebnis     passt
+#   HINWEIS|Bereich|...     geht, aber bitte lesen
+#   FEHLER|Bereich|...      so klappt die Installation nicht
+
+set -uo pipefail
+
+results=()
+add() { results+=("$1|$2|$3"); }
+
+# --- Start-Modus -------------------------------------------------------------------
+if [[ -d /sys/firmware/efi ]]; then
+    add OK "Start-Modus" "UEFI"
+else
+    add FEHLER "Start-Modus" "BIOS/Legacy. Der Installer braucht UEFI: im BIOS-Setup CSM/Legacy ausschalten"
+fi
+
+# --- Grafik -------------------------------------------------------------------------
+gpu_found=""
+for dev in /sys/class/drm/card[0-9]*/device; do
+    [[ -e "${dev}/driver" ]] || continue
+    driver="$(basename "$(readlink -f "${dev}/driver")")"
+    slot="$(basename "$(readlink -f "${dev}")")"
+    name="$(lspci -s "${slot}" 2>/dev/null | sed 's/^[^:]*: //; s/^[^:]*: //')"
+    [[ -n "${name}" ]] || name="${slot}"
+    gpu_found=1
+    case "${driver}" in
+        amdgpu)  add OK "Grafik" "${name} (Treiber amdgpu)" ;;
+        radeon)  add HINWEIS "Grafik" "${name}: ältere AMD-Karte (Treiber radeon), Spiele laufen evtl. langsamer" ;;
+        i915|xe) add OK "Grafik" "${name} (Intel, Treiber ${driver})" ;;
+        nouveau|nvidia) add HINWEIS "Grafik" "${name}: NVIDIA. Kairo ist auf AMD eingestellt, für Spiele fehlt der NVIDIA-Treiber" ;;
+        virtio*|bochs*|qxl|vmwgfx) add HINWEIS "Grafik" "Virtuelle Maschine (${driver})" ;;
+        *)       add HINWEIS "Grafik" "${name} (Treiber ${driver})" ;;
+    esac
+done
+[[ -n "${gpu_found}" ]] || add FEHLER "Grafik" "Keine Grafikkarte mit Treiber gefunden"
+
+# --- Prozessor, Arbeitsspeicher -------------------------------------------------------
+cpu="$(sed -n 's/^model name[[:space:]]*: //p' /proc/cpuinfo | head -1)"
+add OK "Prozessor" "${cpu:-unbekannt} ($(nproc) Threads)"
+
+mem_gib=$(( ($(awk '/MemTotal/ {print $2}' /proc/meminfo) + 524288) / 1024 / 1024 ))
+if (( mem_gib >= 8 )); then
+    add OK "Arbeitsspeicher" "${mem_gib} GiB"
+else
+    add HINWEIS "Arbeitsspeicher" "${mem_gib} GiB. Geht, für Spiele sind 8 GiB oder mehr besser"
+fi
+
+# --- Netzwerk -------------------------------------------------------------------------
+wifi="$(nmcli -t -f TYPE,STATE,DEVICE device 2>/dev/null | awk -F: '$1 == "wifi" {print $3 " (" $2 ")"; exit}')"
+if [[ -n "${wifi}" ]]; then
+    add OK "WLAN" "${wifi}"
+else
+    add HINWEIS "WLAN" "Kein WLAN-Adapter erkannt (mit LAN-Kabel geht es trotzdem)"
+fi
+
+if curl -sI --max-time 10 https://geo.mirror.pkgbuild.com >/dev/null; then
+    add OK "Internet" "Verbunden (nötig für die Installation)"
+else
+    add FEHLER "Internet" "Nicht verbunden. Oben rechts WLAN wählen oder LAN-Kabel einstecken"
+fi
+
+if compgen -G "/sys/class/bluetooth/hci*" >/dev/null; then
+    add OK "Bluetooth" "Vorhanden"
+else
+    add HINWEIS "Bluetooth" "Nicht gefunden (nur wichtig für Bluetooth-Kopfhörer/Controller)"
+fi
+
+# --- Ton ------------------------------------------------------------------------------
+cards="$(sed -n 's/^ *[0-9]* \[[^]]*\]: //p' /proc/asound/cards 2>/dev/null | paste -sd ', ')"
+if [[ -n "${cards}" ]]; then
+    add OK "Ton" "${cards}"
+else
+    add FEHLER "Ton" "Keine Soundkarte gefunden"
+fi
+
+# --- Festplatten ----------------------------------------------------------------------
+mapfile -t disks < <(/usr/local/bin/kairo-install --list-disks 2>/dev/null)
+big=0
+for d in "${disks[@]}"; do
+    IFS=$'\t' read -r dev size model <<<"${d}"
+    (( size >= 32 )) && big=1
+    add OK "Festplatte" "${dev}: ${size} GiB ${model}"
+done
+if (( ${#disks[@]} == 0 )); then
+    add FEHLER "Festplatte" "Keine Festplatte gefunden"
+elif (( ! big )); then
+    add FEHLER "Festplatte" "Keine Festplatte mit mindestens 32 GiB"
+fi
+
+# --- Ausgabe --------------------------------------------------------------------------
+if [[ "${1:-}" == --text ]]; then
+    printf '%s\n' "${results[@]}"
+    exit 0
+fi
+
+rows=()
+errors=0 hints=0
+for r in "${results[@]}"; do
+    IFS='|' read -r status area text <<<"${r}"
+    case "${status}" in
+        OK)      sym="✅" ;;
+        HINWEIS) sym="⚠️"; hints=$((hints + 1)) ;;
+        *)       sym="❌"; errors=$((errors + 1)) ;;
+    esac
+    rows+=("${sym}" "${area}" "${text}")
+done
+
+if (( errors )); then
+    summary="<b>${errors} Problem(e)</b>: So klappt die Installation noch nicht, siehe ❌."
+elif (( hints )); then
+    summary="<b>Kairo läuft auf diesem PC.</b> Bitte die ⚠️-Hinweise lesen."
+else
+    summary="<b>Alles passt.</b> Kairo kann installiert werden."
+fi
+
+report="${HOME}/kairo-hardware.txt"
+printf '%s\n' "${results[@]}" > "${report}" 2>/dev/null || true
+
+zenity --list --title="Hardware prüfen" --width=820 --height=520 \
+    --text="${summary}\n(Gespeichert in ${report})" \
+    --column="" --column="Bereich" --column="Ergebnis" "${rows[@]}" \
+    --ok-label="Schließen" --cancel-label="Nochmal prüfen" >/dev/null \
+    || exec "$0"

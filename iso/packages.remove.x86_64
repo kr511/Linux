@@ -1,0 +1,10 @@
+# Pakete aus der releng-Liste, die NICHT ins Kairo-Live-System kommen.
+# Grund: Die ISO muss unter 2 GiB bleiben (Grenze für Dateien in einem
+# GitHub-Release). Das installierte System bekommt trotzdem die volle
+# Firmware (packages.target: linux-firmware).
+
+# "linux-firmware" zieht alle Teilpakete nach, auch NVIDIA (99 MiB). Statt
+# dessen stehen die gebrauchten Teilpakete einzeln in packages.kairo.x86_64.
+linux-firmware
+# Firmware für Marvell-Server-Netzwerkkarten (78 MiB)
+linux-firmware-marvell
