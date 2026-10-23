@@ -7,7 +7,7 @@
 # Was installiert wird:
 #   GNOME, linux-zen, AMD-Treiber (Mesa/Vulkan inkl. 32 Bit), Steam, Discord,
 #   Firefox, Web-Apps Claude/ChatGPT, beim ersten Start per Flatpak:
-#   Roblox (Sober), Spotify, VS Code, dazu Claude Code.
+#   Roblox (Sober), Spotify, VS Code, dazu Claude Code und Codex (Terminal).
 #   Paketlisten: /usr/local/share/kairo/packages.target, flatpaks.target
 #
 # Aufbau der Festplatte:
@@ -263,4 +263,4 @@ printf '\n%sKairo OS ist installiert.%s\n\n' "${green}" "${off}"
 printf '  1. Rechner ausschalten, USB-Stick abziehen, wieder einschalten.\n'
 printf '  2. Mit "%s" anmelden.\n' "${user}"
 printf '  3. Beim ersten Start mit Internet lädt Kairo im Hintergrund Roblox (Sober),\n'
-printf '     Spotify, VS Code und Claude Code nach. Das dauert ein paar Minuten.\n\n'
+printf '     Spotify, VS Code, Claude Code und Codex nach. Das dauert ein paar Minuten.\n\n'

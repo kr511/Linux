@@ -285,6 +285,7 @@ def evaluate_install(installed, output, powered_off):
         ("Spotify installiert", "com.spotify.Client" in flatpaks),
         ("VS Code installiert", "com.visualstudio.code" in flatpaks),
         ("Claude Code installiert", has(output, r"^CLAUDE=/\S+")),
+        ("Codex installiert", has(output, r"^CODEX=/\S+")),
         ("Web-Apps Claude und ChatGPT im Menü",
          has(output, r"^kairo-claude\.desktop") and has(output, r"^kairo-chatgpt\.desktop")),
         ("zram-Swap aktiv", has(output, r"^SWAP:.*zram")),

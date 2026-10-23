@@ -19,6 +19,7 @@ sleep 10
         vulkan-radeon lib32-vulkan-radeon gamemode mangohud zram-generator
     echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
     echo "CLAUDE=$(command -v claude)"
+    echo "CODEX=$(command -v codex)"
     echo "SWAP: $(swapon --noheadings --show=NAME | tr '\n' ' ')"
     grep -q '^\[multilib\]' /etc/pacman.conf && echo "MULTILIB=an"
     cat /etc/locale.conf /etc/vconsole.conf /etc/hostname
