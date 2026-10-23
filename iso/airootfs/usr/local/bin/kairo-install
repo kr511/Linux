@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+#
+# kairo-install: installiert Kairo OS auf eine GANZE Festplatte.
+#
+#   ACHTUNG: Die gewählte Festplatte wird komplett gelöscht.
+#
+# Was installiert wird:
+#   GNOME, linux-zen, AMD-Treiber (Mesa/Vulkan inkl. 32 Bit), Steam, Discord,
+#   Firefox, Web-Apps Claude/ChatGPT, beim ersten Start per Flatpak:
+#   Roblox (Sober), Spotify, VS Code, dazu Claude Code.
+#   Paketlisten: /usr/local/share/kairo/packages.target, flatpaks.target
+#
+# Aufbau der Festplatte:
+#   1  1 GiB  EFI-Partition (FAT32, /boot, Bootloader systemd-boot)
+#   2  Rest   Kairo (ext4, /)
+#
+# Aufruf (als root, im Live-System):
+#   kairo-install
+#
+# Ohne Rückfragen (nur für automatische Tests):
+#   KAIRO_DISK=/dev/vda KAIRO_USER=name KAIRO_PASSWORD=pw KAIRO_YES=1 kairo-install
+#   KAIRO_SELFTEST=1 installiert zusätzlich den Selbsttest (schaltet sich nach
+#   dem ersten Start selbst aus). NIE auf einem echten PC benutzen.
+
+set -euo pipefail
+
+share=/usr/local/share/kairo
+mnt=/mnt
+min_gib=32
+
+bold=$'\e[1m' red=$'\e[1;31m' green=$'\e[1;32m' off=$'\e[0m'
+die()  { printf '\n%sFEHLER:%s %s\n' "${red}" "${off}" "$*" >&2; exit 1; }
+info() { printf '\n%s==> %s%s\n' "${bold}" "$*" "${off}"; }
+
+# Liest eine Liste (Kommentare und Leerzeilen weg)
+read_list() { sed -e 's/#.*//' -e 's/[[:space:]]//g' "$1" | awk NF; }
+
+# Bei Fehler: Festplatte wieder aushängen und Hinweis geben
+on_error() {
+    printf '\n%sDie Installation ist fehlgeschlagen.%s Die Meldung steht oben.\n' "${red}" "${off}" >&2
+    printf 'Protokoll: /tmp/kairo-install.log\n' >&2
+    umount -R "${mnt}" 2>/dev/null || true
+    [[ -n "${KAIRO_SELFTEST:-}" ]] && echo KAIRO_INSTALL_FAILED > /dev/ttyS0
+}
+trap on_error ERR
+
+# Alles zusätzlich ins Protokoll schreiben
+exec > >(tee -a /tmp/kairo-install.log) 2>&1
+
+# --- 1. Vorabprüfungen -----------------------------------------------------------
+
+(( EUID == 0 )) || die "Bitte als root starten: sudo kairo-install"
+[[ -d /run/archiso ]] || die "Läuft nur im Kairo-Live-System (vom USB-Stick)."
+[[ -d /sys/firmware/efi ]] \
+    || die "Der PC ist im alten BIOS-Modus gestartet. Kairo braucht UEFI: im BIOS-Setup 'UEFI' einschalten (CSM/Legacy aus) und neu starten."
+
+printf '%s\n' "${bold}Kairo OS installieren${off}"
+printf 'Dieser Installer löscht eine GANZE Festplatte und installiert Kairo darauf.\n'
+
+info "Prüfe Internetverbindung"
+until curl -sI --max-time 10 https://geo.mirror.pkgbuild.com >/dev/null; do
+    [[ -n "${KAIRO_YES:-}" ]] && die "Kein Internet."
+    printf 'Kein Internet. WLAN oben rechts im Desktop verbinden (oder: nmtui), dann Enter drücken. '
+    read -r _
+done
+echo "Internet ok"
+
+# --- 2. Festplatte wählen --------------------------------------------------------
+
+# Der USB-Stick, von dem Kairo gerade läuft, darf nie gewählt werden
+live_dev="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
+live_disk=""
+[[ -n "${live_dev}" ]] && live_disk="/dev/$(lsblk -no PKNAME "${live_dev}" 2>/dev/null | head -1)"
+[[ "${live_disk}" == /dev/ ]] && live_disk="${live_dev}"
+
+mapfile -t disks < <(lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}' \
+                     | grep -v -e '^/dev/zram' -e '^/dev/loop' | grep -vxF "${live_disk:-none}" || true)
+(( ${#disks[@]} )) || die "Keine Festplatte gefunden."
+
+if [[ -n "${KAIRO_DISK:-}" ]]; then
+    disk="${KAIRO_DISK}"
+    printf '%s\n' "${disks[@]}" | grep -qxF "${disk}" || die "${disk} ist keine wählbare Festplatte."
+else
+    info "Welche Festplatte soll Kairo bekommen? ALLES darauf wird gelöscht."
+    for i in "${!disks[@]}"; do
+        printf '  %d) %s\n' "$((i + 1))" "$(lsblk -dno NAME,SIZE,MODEL "${disks[$i]}" | sed 's/  */ /g')"
+        lsblk -no NAME,SIZE,FSTYPE,LABEL "${disks[$i]}" | tail -n +2 | sed 's/^/        /'
+    done
+    while true; do
+        read -rp "Nummer: " n
+        [[ "${n}" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#disks[@]} )) && break
+        echo "Bitte eine Nummer von 1 bis ${#disks[@]} eingeben."
+    done
+    disk="${disks[$((n - 1))]}"
+fi
+
+size_gib=$(( $(lsblk -dbno SIZE "${disk}") / 1024 / 1024 / 1024 ))
+(( size_gib >= min_gib )) || die "${disk} hat nur ${size_gib} GiB, Kairo braucht mindestens ${min_gib} GiB."
+
+# --- 3. Benutzer ------------------------------------------------------------------
+
+if [[ -n "${KAIRO_USER:-}" ]]; then
+    user="${KAIRO_USER}"
+else
+    info "Benutzerkonto"
+    while true; do
+        read -rp "Benutzername (klein, z. B. elias): " user
+        [[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] && [[ "${user}" != root ]] && break
+        echo "Nur Kleinbuchstaben, Ziffern, - und _, am Anfang ein Buchstabe."
+    done
+fi
+[[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "Ungültiger Benutzername: ${user}"
+
+if [[ -n "${KAIRO_PASSWORD:-}" ]]; then
+    password="${KAIRO_PASSWORD}"
+else
+    while true; do
+        read -rsp "Passwort: " password; echo
+        read -rsp "Passwort wiederholen: " password2; echo
+        [[ -n "${password}" && "${password}" == "${password2}" ]] && break
+        echo "Leer oder nicht gleich, bitte nochmal."
+    done
+fi
+
+# --- 4. Letzte Bestätigung --------------------------------------------------------
+
+info "Zusammenfassung"
+printf '  Festplatte:  %s (%s GiB) %s\n' "${disk}" "${size_gib}" "$(lsblk -dno MODEL "${disk}")"
+printf '  Benutzer:    %s (Administrator, sudo)\n' "${user}"
+printf '  Sprache:     Deutsch, Tastatur deutsch, Zeitzone Europe/Berlin\n'
+printf '\n  %sALLE DATEN AUF %s WERDEN GELÖSCHT.%s\n\n' "${red}" "${disk}" "${off}"
+if [[ -z "${KAIRO_YES:-}" ]]; then
+    read -rp "Zum Fortfahren LÖSCHEN eintippen: " answer
+    [[ "${answer}" == "LÖSCHEN" || "${answer}" == "LOESCHEN" ]] || die "Abgebrochen, nichts wurde verändert."
+fi
+
+# --- 5. Partitionieren und formatieren -------------------------------------------
+
+info "Partitioniere ${disk}"
+umount -R "${mnt}" 2>/dev/null || true
+swapoff -a 2>/dev/null || true
+wipefs --all --force "${disk}"
+sgdisk --zap-all "${disk}"
+sgdisk -n 1:0:+1G -t 1:ef00 -c 1:EFI \
+       -n 2:0:0   -t 2:8304 -c 2:Kairo "${disk}"
+partprobe "${disk}" || true
+udevadm settle
+
+mapfile -t parts < <(lsblk -lnpo NAME,TYPE "${disk}" | awk '$2 == "part" {print $1}')
+(( ${#parts[@]} == 2 )) || die "Partitionen nicht gefunden (${parts[*]:-keine})."
+efi="${parts[0]}" root="${parts[1]}"
+
+mkfs.fat -F 32 -n EFI "${efi}"
+mkfs.ext4 -F -L Kairo "${root}"
+
+mount "${root}" "${mnt}"
+mount --mkdir -o umask=0077 "${efi}" "${mnt}/boot"
+
+# --- 6. Pakete installieren -------------------------------------------------------
+
+info "Bereite Paketquellen vor"
+systemctl start pacman-init.service 2>/dev/null || true
+if ! grep -q '^Server' /etc/pacman.d/mirrorlist; then
+    cat > /etc/pacman.d/mirrorlist <<'EOF'
+# Kairo: schnelle Mirrors in Deutschland, dazu der weltweite Arch-Mirror
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
+Server = https://ftp.halifax.rwth-aachen.de/archlinux/$repo/os/$arch
+Server = https://mirror.netcologne.de/archlinux/$repo/os/$arch
+EOF
+fi
+# multilib (32-Bit-Pakete) wird für Steam gebraucht
+pacman_conf=/tmp/kairo-pacman.conf
+sed -e '/^#\[multilib\]$/,/^#Include/ s/^#//' -e 's/^#ParallelDownloads.*/ParallelDownloads = 5/' \
+    /etc/pacman.conf > "${pacman_conf}"
+grep -q '^\[multilib\]' "${pacman_conf}" || die "multilib konnte nicht aktiviert werden."
+pacman --config "${pacman_conf}" -Sy --noconfirm --needed archlinux-keyring
+
+mapfile -t pkgs < <(read_list "${share}/packages.target")
+info "Installiere ${#pkgs[@]} Pakete (dauert je nach Internet 10-30 Minuten)"
+pacstrap -C "${pacman_conf}" -K "${mnt}" "${pkgs[@]}"
+
+install -m 0644 "${pacman_conf}" "${mnt}/etc/pacman.conf"
+install -m 0644 /etc/pacman.d/mirrorlist "${mnt}/etc/pacman.d/mirrorlist"
+genfstab -U "${mnt}" >> "${mnt}/etc/fstab"
+
+# --- 7. Kairo-Dateien ---------------------------------------------------------------
+
+info "Kopiere Kairo-Einstellungen"
+cp -a "${share}/target/." "${mnt}/"
+chmod 0755 "${mnt}/usr/local/bin/kairo-firstboot"
+install -Dm 0644 "${share}/os-release" "${mnt}/usr/local/share/kairo/os-release"
+install -m 0644 "${share}/os-release" "${mnt}/usr/lib/os-release"
+install -m 0644 "${share}/flatpaks.target" "${mnt}/usr/local/share/kairo/flatpaks.target"
+
+if [[ -n "${KAIRO_SELFTEST:-}" ]]; then
+    install -m 0755 "${share}/selftest/kairo-selftest" "${mnt}/usr/local/bin/kairo-selftest"
+    install -m 0644 "${share}/selftest/kairo-selftest.service" "${mnt}/etc/systemd/system/"
+fi
+
+# --- 8. System einrichten (im neuen System) ----------------------------------------
+
+info "Richte das System ein"
+root_uuid="$(blkid -s UUID -o value "${root}")"
+# Variablen gehen über die Umgebung rein, damit das Passwort nicht in der
+# Befehlszeile (ps) auftaucht
+KAIRO_U="${user}" KAIRO_P="${password}" KAIRO_ROOT_UUID="${root_uuid}" \
+KAIRO_SELFTEST="${KAIRO_SELFTEST:-}" \
+arch-chroot "${mnt}" /bin/bash -euo pipefail <<'CHROOT'
+ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
+hwclock --systohc || true
+
+sed -i -e 's/^#de_DE.UTF-8 UTF-8/de_DE.UTF-8 UTF-8/' -e 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo 'LANG=de_DE.UTF-8' > /etc/locale.conf
+printf 'KEYMAP=de-latin1\nFONT=ter-v16n\n' > /etc/vconsole.conf
+echo kairo > /etc/hostname
+
+# Benutzer: Administrator über sudo, root selbst bekommt kein Passwort
+# gamemode: darf im Spiel-Modus die CPU-Priorität anheben (falls es die Gruppe gibt)
+groups=wheel
+getent group gamemode >/dev/null && groups+=,gamemode
+useradd -m -c "${KAIRO_U}" -G "${groups}" -s /bin/bash "${KAIRO_U}"
+printf '%s:%s\n' "${KAIRO_U}" "${KAIRO_P}" | chpasswd
+passwd -l root
+echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
+chmod 0440 /etc/sudoers.d/10-wheel
+
+# Dienste
+systemctl enable gdm NetworkManager bluetooth fstrim.timer paccache.timer \
+    systemd-timesyncd kairo-firstboot.service
+[[ -n "${KAIRO_SELFTEST}" ]] && systemctl enable kairo-selftest.service
+dconf update
+
+# Bootloader: systemd-boot mit linux-zen und AMD-Microcode
+bootctl install
+cat > /boot/loader/loader.conf <<EOF
+default kairo.conf
+timeout 3
+console-mode max
+editor no
+EOF
+for entry in kairo:"" kairo-fallback:-fallback; do
+    name="${entry%%:*}" suffix="${entry#*:}"
+    title="Kairo OS"; [[ -n "${suffix}" ]] && title="Kairo OS (Notfall)"
+    cat > "/boot/loader/entries/${name}.conf" <<EOF
+title   ${title}
+linux   /vmlinuz-linux-zen
+initrd  /amd-ucode.img
+initrd  /initramfs-linux-zen${suffix}.img
+options root=UUID=${KAIRO_ROOT_UUID} rw quiet
+EOF
+done
+CHROOT
+
+# --- 9. Fertig -----------------------------------------------------------------------
+
+sync
+umount -R "${mnt}"
+trap - ERR
+[[ -n "${KAIRO_SELFTEST:-}" ]] && echo KAIRO_INSTALL_DONE > /dev/ttyS0
+
+printf '\n%sKairo OS ist installiert.%s\n\n' "${green}" "${off}"
+printf '  1. Rechner ausschalten, USB-Stick abziehen, wieder einschalten.\n'
+printf '  2. Mit "%s" anmelden.\n' "${user}"
+printf '  3. Beim ersten Start mit Internet lädt Kairo im Hintergrund Roblox (Sober),\n'
+printf '     Spotify, VS Code und Claude Code nach. Das dauert ein paar Minuten.\n\n'

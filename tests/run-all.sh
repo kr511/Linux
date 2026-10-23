@@ -14,7 +14,10 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 echo "==> shellcheck: Skripte"
-shellcheck -x scripts/*.sh tests/*.sh iso/profiledef.kairo.sh
+shellcheck -x scripts/*.sh tests/*.sh iso/profiledef.kairo.sh \
+    iso/airootfs/usr/local/bin/* \
+    iso/airootfs/usr/local/share/kairo/target/usr/local/bin/* \
+    iso/airootfs/usr/local/share/kairo/selftest/kairo-selftest
 
 echo "==> shellcheck: PKGBUILD"
 # Ausnahmen, weil makepkg diese Variablen setzt bzw. weil wir bewusst nah am

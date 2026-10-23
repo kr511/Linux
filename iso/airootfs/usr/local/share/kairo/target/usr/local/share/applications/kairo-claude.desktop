@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Claude
+Comment=KI-Assistent von Anthropic (Web-App)
+Exec=chromium --app=https://claude.ai --class=kairo-claude
+Icon=kairo-claude
+StartupWMClass=chrome-claude.ai__-Default
+Categories=Network;Utility;

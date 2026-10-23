@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Wird einmalig von kairo-firstboot.service ausgeführt (als root).
+# Installiert Apps, die es nicht als Arch-Paket gibt. Erst wenn alles
+# geklappt hat, wird /var/lib/kairo/firstboot-done angelegt.
+
+set -uo pipefail
+
+failed=0
+
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
+    || failed=1
+
+while read -r app; do
+    echo "==> Flatpak: ${app}"
+    flatpak install --system --noninteractive --assumeyes flathub "${app}" || failed=1
+done < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' /usr/local/share/kairo/flatpaks.target | awk NF)
+
+echo "==> Claude Code (npm)"
+npm install --global @anthropic-ai/claude-code || failed=1
+
+if (( failed )); then
+    echo "Nicht alles hat geklappt, nächster Versuch beim nächsten Start." >&2
+    exit 1
+fi
+mkdir -p /var/lib/kairo
+touch /var/lib/kairo/firstboot-done
+echo "==> Fertig"

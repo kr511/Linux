@@ -67,6 +67,18 @@ done < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' "${repo_dir}/iso/packages.kairo.
 (( ${#missing[@]} == 0 )) \
     || die "Nicht in den Repos gefunden: ${missing[*]} (Tippfehler? 'sudo pacman -Syu' gemacht?)"
 
+# Dasselbe für die Pakete, die kairo-install später auf die Festplatte bringt.
+# Fehlt hier eins, würde erst die Installation auf dem PC scheitern.
+# Braucht multilib (32 Bit für Steam) in /etc/pacman.conf.
+target_list="${repo_dir}/iso/airootfs/usr/local/share/kairo/packages.target"
+missing=()
+while read -r pkg; do
+    pacman -Si -- "${pkg}" >/dev/null 2>&1 || pacman -Sg -- "${pkg}" >/dev/null 2>&1 \
+        || missing+=("${pkg}")
+done < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' "${target_list}" | awk NF)
+(( ${#missing[@]} == 0 )) \
+    || die "Pakete für die Installation nicht gefunden: ${missing[*]} (multilib in /etc/pacman.conf aktiv?)"
+
 # --- Profil zusammenbauen -------------------------------------------------------
 
 "${repo_dir}/scripts/assemble-iso-profile.sh" --out "${profile_dir}"

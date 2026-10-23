@@ -1,0 +1,19 @@
+# Legt beim Start des Live-Systems den Benutzer "kairo" an (ohne Passwort).
+# GDM meldet ihn automatisch an, siehe /etc/gdm/custom.conf.
+#
+# Warum ein Dienst statt einer fertigen /etc/passwd im Overlay? Die
+# Gruppen-IDs (wheel, video, ...) vergibt Arch beim Paketbau dynamisch.
+# useradd zur Laufzeit trifft immer die richtigen.
+
+[Unit]
+Description=Kairo Live-Benutzer anlegen
+Before=display-manager.service systemd-user-sessions.service
+ConditionPathExists=!/home/kairo
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/useradd -m -c "Kairo Live" -G wheel -s /bin/bash kairo
+ExecStart=/usr/bin/passwd -d kairo
+
+[Install]
+WantedBy=multi-user.target

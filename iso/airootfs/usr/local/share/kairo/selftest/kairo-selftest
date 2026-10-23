@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# NUR für den automatischen Installationstest. Gegenstück: scripts/install-test.py
+
+# GNOME braucht nach dem Start ein paar Sekunden
+for _ in $(seq 60); do
+    systemctl is-active --quiet gdm && break
+    sleep 2
+done
+sleep 10
+
+{
+    echo '===SELFTEST_BEGIN'
+    cat /etc/os-release
+    echo "KERNEL=$(uname -r)"
+    echo "GDM=$(systemctl is-active gdm)"
+    echo "NM=$(systemctl is-active NetworkManager)"
+    echo "FIRSTBOOT_DONE=$(test -e /var/lib/kairo/firstboot-done && echo ja || echo nein)"
+    pacman -Q steam discord firefox chromium gnome-shell linux-zen amd-ucode \
+        vulkan-radeon lib32-vulkan-radeon gamemode mangohud zram-generator
+    echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
+    echo "CLAUDE=$(command -v claude)"
+    echo "SWAP: $(swapon --noheadings --show=NAME | tr '\n' ' ')"
+    grep -q '^\[multilib\]' /etc/pacman.conf && echo "MULTILIB=an"
+    cat /etc/locale.conf /etc/vconsole.conf /etc/hostname
+    echo "GRUPPEN: $(id -nG tester)"
+    bootctl status 2>/dev/null | grep -E 'Product:|Firmware:'
+    ls /usr/local/share/applications/
+    echo '===SELFTEST_END'
+} > /dev/ttyS0 2>&1
+
+# Zeit für den Screenshot des Anmeldebildschirms, dann aus
+sleep 30
+systemctl poweroff

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Begrüßung nach dem Start des Live-Systems: fragt, ob installiert werden soll.
+zenity --question --width=420 --title="Willkommen bei Kairo OS" \
+    --text="Kairo läuft gerade nur vom USB-Stick, deine Festplatte ist unberührt.\n\nJetzt auf die Festplatte installieren?\n\n(Geht auch später über \"Kairo installieren\" im Dock.)" \
+    --ok-label="Installieren" --cancel-label="Erst ausprobieren" \
+    && exec gtk-launch kairo-install

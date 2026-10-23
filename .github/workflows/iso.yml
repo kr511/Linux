@@ -5,7 +5,9 @@
 #
 #   build      ISO im offiziellen Arch-Container mit scripts/build-iso.sh
 #   boot-test  ISO in QEMU starten (UEFI und BIOS), Checkliste per
-#              scripts/boot-test.py abarbeiten, Screenshots speichern
+#              scripts/boot-test.py abarbeiten, Screenshots speichern.
+#              Dazu "install": kairo-install auf eine virtuelle Festplatte,
+#              danach von dort starten und alle Apps prüfen
 #
 # Ergebnisse im Browser: Actions -> dieser Lauf -> "Summary". Dort stehen die
 # Prüftabellen, unten die Artifacts (ISO, Screenshots, serial.log).
@@ -52,6 +54,9 @@ jobs:
           docker run --rm --privileged -v "$PWD:/repo" -w /repo \
             -e HOST_IDS="$(id -u):$(id -g)" archlinux:latest \
             bash -euo pipefail -c '
+              # multilib nur, damit build-iso.sh die Steam-Pakete (32 Bit) für
+              # den Installer prüfen kann. Die ISO selbst baut ohne.
+              printf "\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n" >> /etc/pacman.conf
               pacman -Syu --noconfirm --needed archiso git python
               useradd -m builder
               # unshare --map-auto braucht Bereiche für Unter-UIDs/-GIDs
@@ -95,15 +100,17 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+  # uefi/bios: Live-System vom Stick. install: kairo-install auf eine
+  # virtuelle Festplatte, dann erster Start davon (lädt Flatpaks, dauert)
   boot-test:
-    name: Boot-Test ${{ matrix.boot }}
+    name: Test ${{ matrix.boot }}
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.boot == 'install' && 150 || 30 }}
     strategy:
       fail-fast: false
       matrix:
-        boot: [uefi, bios]
+        boot: [uefi, bios, install]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -111,6 +118,13 @@ jobs:
         with:
           name: kairo-iso
           path: out
+
+      # Die virtuelle Festplatte des Installationstests wird ca. 15 GiB groß
+      - name: Platz schaffen
+        if: matrix.boot == 'install'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
 
       - name: QEMU und UEFI-Firmware installieren
         run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 ovmf
@@ -124,10 +138,10 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
 
-      - name: Booten und Checkliste prüfen
+      - name: Starten und Checkliste prüfen
         run: |
           flag=""
-          [[ "${{ matrix.boot }}" == bios ]] && flag=--bios
+          [[ "${{ matrix.boot }}" != uefi ]] && flag="--${{ matrix.boot }}"
           set +e
           scripts/boot-test.py $flag --out boot-test out/kairo-*-x86_64.iso
           rc=$?
@@ -136,7 +150,7 @@ jobs:
 
       - name: Serielle Ausgabe anzeigen
         if: always()
-        run: cat boot-test/serial.log || true
+        run: cat boot-test/serial*.log || true
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: always()

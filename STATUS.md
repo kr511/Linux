@@ -14,6 +14,10 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 91, siehe Protokoll |
 | ISO bootet in QEMU (UEFI/BIOS) | ✅ | Automatisch per `scripts/boot-test.py` in GitHub Actions: UEFI 13/13, BIOS 12/12. ping nur per HTTPS ersetzt (siehe Protokoll) |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
+| 0.2: GNOME-Live-System (GDM, Autologin, NetworkManager) | 🟨 | Vorbereitet, Test: `iso.yml` (uefi/bios) |
+| 0.2: `kairo-install` auf leere Festplatte | 🟨 | Vorbereitet, Test: `iso.yml` (install) |
+| 0.2: Erster Start, Apps nachladen (`kairo-firstboot`) | 🟨 | Vorbereitet, Test: `iso.yml` (install) |
+| 0.2: Installation auf deinem echten PC | ⬜ | Erst nach grünem Installationstest |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
 | `scripts/kernel-smoke-test.sh` | 🟩 | Mit Testkernel (defconfig + kairo.config) bestanden, Gegenprobe korrekt |

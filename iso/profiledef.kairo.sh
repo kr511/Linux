@@ -17,8 +17,17 @@ iso_label="KAIRO_$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y%m)"
 iso_publisher="Kairo OS <https://github.com/kr511/Linux>"
 iso_application="Kairo OS Live"
 
-# Projektversion plus Build-Datum, z. B. 0.1-2026.10.22
-iso_version="0.1-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
+# Projektversion plus Build-Datum, z. B. 0.2-2026.10.23
+iso_version="0.2-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 
 # install_dir bleibt absichtlich "arch" (Standard von releng). Der Ordnername
 # ist für Nutzer unsichtbar; ihn zu ändern bringt in 0.1 nur Risiko.
+
+# Dateirechte für Kairo-Dateien. mkarchiso kopiert das Overlay ohne die
+# Rechte aus Git, darum müssen ausführbare und geheime Dateien hier stehen.
+# (+= ergänzt die Liste aus releng, statt sie zu ersetzen)
+file_permissions+=(
+  ["/etc/sudoers.d/kairo-live"]="0:0:440"
+  ["/usr/local/bin/kairo-install"]="0:0:755"
+  ["/usr/local/bin/kairo-welcome"]="0:0:755"
+)

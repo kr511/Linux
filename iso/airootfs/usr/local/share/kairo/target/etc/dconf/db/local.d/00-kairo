@@ -1,0 +1,18 @@
+# GNOME-Voreinstellungen für das installierte Kairo. Jeder Benutzer kann sie
+# in den Einstellungen ändern, das hier sind nur die Startwerte.
+
+[org/gnome/shell]
+favorite-apps=['firefox.desktop', 'org.gnome.Nautilus.desktop', 'steam.desktop', 'org.vinegarhq.Sober.desktop', 'discord.desktop', 'com.spotify.Client.desktop', 'com.visualstudio.code.desktop', 'kairo-claude.desktop', 'kairo-chatgpt.desktop', 'org.gnome.Console.desktop']
+
+[org/gnome/desktop/input-sources]
+sources=[('xkb', 'de')]
+
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+
+# Variable Bildwiederholrate (FreeSync) für AMD-Grafik und passende Monitore
+[org/gnome/mutter]
+experimental-features=['variable-refresh-rate']
