@@ -12,7 +12,7 @@
 | Kernel | `linux-zen` (für Desktop und Spiele optimiert), AMD-Microcode |
 | Grafik | AMD: Mesa, Vulkan (`vulkan-radeon`, auch 32 Bit für Steam), FreeSync an |
 | Spiele | Steam (mit Proton), Roblox über **Sober**, GameMode, MangoHud, Gamescope |
-| Apps | Firefox, Discord, Spotify, VS Code, Claude und ChatGPT als Web-Apps, Claude Code im Terminal |
+| Apps | Firefox, Discord, Spotify, VS Code, Claude und ChatGPT als Web-Apps, Claude Code und Codex im Terminal |
 | System | zram-Swap, Bluetooth, PipeWire (Ton), WLAN über NetworkManager |
 
 **Roblox:** Der normale Roblox-Client läuft auf Linux nicht, auch nicht mit
@@ -22,7 +22,7 @@ Roblox für Linux. Die meisten Spiele laufen, aber nicht alle.
 **Claude und ChatGPT:** Für Linux gibt es keine offiziellen Desktop-Apps. Kairo
 öffnet die Webseiten in einem eigenen Fenster mit eigenem Symbol, ohne Browserleiste.
 
-Roblox (Sober), Spotify, VS Code und Claude Code werden beim **ersten Start**
+Roblox (Sober), Spotify, VS Code, Claude Code und Codex werden beim **ersten Start**
 im Hintergrund aus dem Internet geladen. Nach ein paar Minuten tauchen sie im
 App-Menü auf. Klappt es nicht (z. B. kein Internet), versucht Kairo es beim
 nächsten Start erneut. Protokoll: `journalctl -u kairo-firstboot`.
@@ -68,6 +68,8 @@ Beim Einschalten des PCs die Setup-Taste drücken (meist `Entf`, `F2` oder `F12`
 
 - Im Anmeldebildschirm mit deinem Benutzer anmelden.
 - Ein paar Minuten warten, bis Roblox (Sober), Spotify und VS Code im App-Menü sind.
+- KI im Terminal: Terminal öffnen, `claude` (Anthropic) oder `codex` (OpenAI)
+  eintippen. Beim ersten Aufruf meldest du dich mit deinem Konto an.
 - Steam starten, anmelden. Für Windows-Spiele: Steam → Einstellungen →
   Kompatibilität → **Steam Play für alle anderen Titel aktivieren**.
 - Spiele-Tipps (in Steam: Spiel → Eigenschaften → Startoptionen):

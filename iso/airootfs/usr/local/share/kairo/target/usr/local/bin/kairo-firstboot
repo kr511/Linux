@@ -16,8 +16,11 @@ while read -r app; do
     flatpak install --system --noninteractive --assumeyes flathub "${app}" || failed=1
 done < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' /usr/local/share/kairo/flatpaks.target | awk NF)
 
-echo "==> Claude Code (npm)"
-npm install --global @anthropic-ai/claude-code || failed=1
+# KI-Assistenten fürs Terminal: Befehle "claude" und "codex"
+for pkg in @anthropic-ai/claude-code @openai/codex; do
+    echo "==> npm: ${pkg}"
+    npm install --global "${pkg}" || failed=1
+done
 
 if (( failed )); then
     echo "Nicht alles hat geklappt, nächster Versuch beim nächsten Start." >&2

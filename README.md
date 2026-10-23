@@ -5,7 +5,8 @@ Arch Linux. Langfristiges Ziel: eigene Live-ISO, eigener Kernel `linux-kairo`
 und eine von Omarchy/Hyprland inspirierte Desktopumgebung.
 
 > **Stand:** Kairo 0.2: GNOME-Live-System mit Installer, Steam, Roblox
-> (Sober), Discord, Spotify, VS Code, Claude/ChatGPT, optimiert für AMD.
+> (Sober), Discord, Spotify, VS Code, Claude/ChatGPT, Claude Code und Codex
+> im Terminal, optimiert für AMD.
 > Installieren: [`docs/06-installieren.md`](docs/06-installieren.md). Was davon wirklich gebaut und getestet
 > wurde, steht **nur** in [`STATUS.md`](STATUS.md). Alles andere gilt als
 > "vorbereitet, aber ungetestet".
