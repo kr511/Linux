@@ -3,6 +3,6 @@ Type=Application
 Name=Kairo Wiederherstellen
 Comment=Kairo auf einen früheren Stand zurücksetzen
 Exec=/usr/local/bin/kairo-restore
-Icon=document-revert
+Icon=kairo-logo
 Terminal=false
 Categories=System;Settings;

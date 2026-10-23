@@ -91,6 +91,8 @@ while IFS= read -r -d '' f; do
         -e 's/Arch Linux live medium/Kairo OS Live/g' \
         -e 's/^MENU TITLE Arch Linux$/MENU TITLE Kairo OS/' \
         -e 's/#9033ccff/#ff4cc38a/' \
+        -e 's/Boot the Kairo OS Live on BIOS/Kairo OS Live im BIOS-Modus starten/' \
+        -e 's/ with speakup screen reader/ mit Sprachausgabe/' \
         -e 's/It allows you to install Arch Linux or perform system maintenance\./Startet Kairo vom USB-Stick, von dort kannst du Kairo installieren./' \
         -- "$f"
 done < <(find "${out_dir}/efiboot" "${out_dir}/syslinux" "${out_dir}/grub" \

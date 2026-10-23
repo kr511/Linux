@@ -14,10 +14,12 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 91, siehe Protokoll |
 | ISO bootet in QEMU (UEFI/BIOS) | ✅ | Automatisch per `scripts/boot-test.py` in GitHub Actions: UEFI 13/13, BIOS 12/12. ping nur per HTTPS ersetzt (siehe Protokoll) |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
-| 0.2: GNOME-Live-System (GDM, Autologin, NetworkManager) | 🟨 | Vorbereitet, Test: `iso.yml` (uefi/bios) |
-| 0.2: `kairo-install` auf leere Festplatte | 🟨 | Vorbereitet, Test: `iso.yml` (install) |
-| 0.2: Erster Start, Apps nachladen (`kairo-firstboot`) | 🟨 | Vorbereitet, Test: `iso.yml` (install) |
-| 0.2: Installation auf deinem echten PC | ⬜ | Erst nach grünem Installationstest |
+| GNOME-Live-System (GDM, Autologin, NetworkManager) | 🟩 | `iso.yml` uefi 18/18, bios 17/17 (0.2 und 1.0) |
+| Kairo-Design (Logo, Hintergrund, Bootmenü) | 🟩 | Im Live-Test sichtbar, Anmeldebildschirm-Logo erst ab nächstem Lauf |
+| `kairo-install` auf leere Festplatte | 🟩 | Läuft durch (0.2: ext4, 1.0: Btrfs + LUKS2), siehe Protokoll |
+| Installiertes System startet | ❌ → 🟨 | Fehlender UEFI-Starteintrag, behoben, Test läuft |
+| Erster Start, Snapshots, Zurückrollen, Update-App | 🟨 | Vorbereitet, Test: `iso.yml` (install, install-crypt) |
+| Installation auf deinem echten PC | ⬜ | Erst nach grünem Installationstest |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
 | `scripts/kernel-smoke-test.sh` | 🟩 | Mit Testkernel (defconfig + kairo.config) bestanden, Gegenprobe korrekt |
@@ -34,6 +36,24 @@ Neue Einträge oben anfügen. Format:
 - Befehl: <exakt>
 - Ergebnis: <bestanden / fehlgeschlagen + Fehlermeldung>
 ```
+
+### 2026-10-23: Erster Installationstest (0.2 und 1.0, GitHub Actions)
+
+- Umgebung: GitHub Actions, QEMU mit KVM, OVMF (Ubuntu), virtuelle
+  40-GiB-Festplatte (virtio)
+- Befehl: `scripts/boot-test.py --install [--encrypt]`, Läufe 39938809843
+  (0.2) und 39953094056 (1.0)
+- Ergebnis Live-Test: bestanden (UEFI 18/18, BIOS 17/17), auch mit neuem Design
+- Ergebnis Installation: `kairo-install` läuft durch, auch mit Btrfs,
+  Subvolumes und LUKS2-Verschlüsselung (1.0)
+- **Fehlgeschlagen:** Start von der Festplatte. Die Firmware landet in der
+  EFI-Shell. Ursache: `bootctl install` überspringt im `arch-chroot` die
+  UEFI-Variablen ("Not booted with EFI or running in a container"), der
+  Fallback-Eintrag stand hinter PXE und EFI-Shell. Behoben: `kairo-install`
+  legt den Starteintrag jetzt mit `efibootmgr` aus dem Live-System an.
+- Gefunden im Code-Review: `npm install -g @openai/codex` kann Erfolg melden,
+  obwohl das Linux-Teilpaket fehlt. Codex kommt jetzt aus dem Arch-Paket
+  `openai-codex`, Claude Code wird nach der Installation mit `--version` geprüft.
 
 ### 2026-10-23: Boot-Test mit HTTPS-Netzwerkprüfung (GitHub Actions)
 

@@ -19,7 +19,7 @@ flatpak update --system --noninteractive --assumeyes
 echo "@@PROGRESS 90"
 
 echo "==> Claude Code"
-npm update --global @anthropic-ai/claude-code || true
+/usr/local/bin/kairo-claude-code || echo "Claude Code konnte nicht aktualisiert werden" >&2
 
 if [[ "$(pacman -Q linux-zen 2>/dev/null || true)" != "${kernel_before}" ]]; then
     touch /run/reboot-required-kairo

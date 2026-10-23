@@ -161,6 +161,14 @@ class KairoDesktopTest(unittest.TestCase):
                 self.assertIn("/usr/local/share/kairo/branding/wallpaper.png", text)
                 self.assertIn("accent-color='green'", text)
 
+    def test_gdm_profil_fuer_logo(self):
+        """Ohne /etc/dconf/profile/gdm ignoriert GDM das Kairo-Logo."""
+        for base in [self.AIROOTFS, self.SHARE / "target"]:
+            with self.subTest(base=str(base.relative_to(ISO))):
+                profile = (base / "etc/dconf/profile/gdm").read_text()
+                self.assertIn("system-db:gdm", profile)
+                self.assertIn("gdm-logo.png", (base / "etc/dconf/db/gdm.d/01-kairo").read_text())
+
     def test_wiederherstellen_auch_vom_usb_stick(self):
         """kairo-rollback muss im Live-System liegen (Kairo startet nicht mehr)
         und wird vom Installer ins neue System kopiert."""

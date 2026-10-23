@@ -226,8 +226,13 @@ class Vm:
         return wait_for(self.serial, "KAIRO_READY", timeout, poke, first_poke=first_poke)
 
 
+# Terminal-Steuerzeichen (Farben, Cursor), z. B. "\x1b[?25l" vor pacman-Ausgaben
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
 def section(serial, begin, end=None):
     text = serial.read_text(errors="replace").replace("\r", "") if serial.exists() else ""
+    text = ANSI_RE.sub("", text)
     text = text.split(begin, 1)[-1] if begin in text else ""
     return text.split(end, 1)[0] if end else text
 

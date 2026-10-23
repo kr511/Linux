@@ -4,7 +4,9 @@ Kairo OS ist eine eigene, bootfähige x86_64-Linux-Distribution auf Basis von
 Arch Linux. Langfristiges Ziel: eigene Live-ISO, eigener Kernel `linux-kairo`
 und eine von Omarchy/Hyprland inspirierte Desktopumgebung.
 
-> **Stand:** Kairo 0.2: GNOME-Live-System mit Installer, Steam, Roblox
+> **Stand:** Kairo 1.0 (in Arbeit): grafischer Installer, Snapshots mit
+> Zurückrollen, optionale Verschlüsselung, Kairo Update, eigenes Design.
+> GNOME-Live-System mit Steam, Roblox
 > (Sober), Discord, Spotify, VS Code, Claude/ChatGPT, Claude Code und Codex
 > im Terminal, optimiert für AMD.
 > Installieren: [`docs/06-installieren.md`](docs/06-installieren.md). Was davon wirklich gebaut und getestet

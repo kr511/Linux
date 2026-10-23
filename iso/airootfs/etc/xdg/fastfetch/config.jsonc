@@ -4,10 +4,10 @@
   "logo": {
     "type": "file",
     "source": "/usr/local/share/kairo/branding/fastfetch-logo.txt",
-    "color": { "1": "38;2;76;195;138" },
+    "color": { "1": "green" },
     "padding": { "top": 1, "right": 3 }
   },
-  "display": { "color": { "keys": "38;2;76;195;138" } },
+  "display": { "color": { "keys": "green" } },
   "modules": ["title", "separator", "os", "kernel", "uptime", "packages", "shell",
               "de", "cpu", "gpu", "memory", "swap", "disk", "localip", "break", "colors"]
 }
