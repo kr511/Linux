@@ -1,5 +1,5 @@
 # Lädt beim ersten Start mit Internet die Flatpak-Apps (Roblox/Sober, Spotify,
-# VS Code) sowie Claude Code und Codex nach. Klappt etwas nicht, versucht es der Dienst
+# VS Code) sowie Claude Code nach. Klappt etwas nicht, versucht es der Dienst
 # beim nächsten Start erneut. Protokoll: journalctl -u kairo-firstboot
 
 [Unit]

@@ -42,10 +42,12 @@ fi
     echo "FIRSTBOOT_DONE=$(test -e /var/lib/kairo/firstboot-done && echo ja || echo nein)"
     pacman -Q steam discord firefox chromium gnome-shell linux-zen amd-ucode \
         vulkan-radeon lib32-vulkan-radeon gamemode mangohud zram-generator \
-        snapper snap-pac plymouth
+        snapper snap-pac plymouth openai-codex
     echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
     echo "CLAUDE=$(command -v claude)"
+    echo "CLAUDE_VERSION=$(claude --version 2>&1 | head -1)"
     echo "CODEX=$(command -v codex)"
+    echo "CODEX_VERSION=$(codex --version 2>&1 | head -1)"
     echo "SWAP: $(swapon --noheadings --show=NAME | tr '\n' ' ')"
     grep -q '^\[multilib\]' /etc/pacman.conf && echo "MULTILIB=an"
     cat /etc/locale.conf /etc/vconsole.conf /etc/hostname

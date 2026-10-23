@@ -79,6 +79,8 @@ steam
 discord
 # Für die Web-Apps Claude und ChatGPT (eigenes Fenster ohne Browserleiste)
 chromium
-# Für Claude Code und Codex (KI-Assistenten im Terminal)
+# KI-Assistenten im Terminal: Codex (offizielles Arch-Paket, wird mit dem
+# System aktualisiert) und Claude Code (nur über npm, siehe kairo-firstboot)
+openai-codex
 nodejs
 npm

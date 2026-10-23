@@ -82,7 +82,7 @@ class KairoDesktopTest(unittest.TestCase):
                     "gnome", "gdm", "steam", "discord", "firefox", "chromium",
                     "zram-generator", "gamemode", "flatpak", "nodejs", "npm",
                     "btrfs-progs", "snapper", "snap-pac", "cryptsetup", "plymouth",
-                    "zenity", "libnotify", "terminus-font"]:
+                    "zenity", "libnotify", "terminus-font", "openai-codex"]:
             with self.subTest(pflicht=pkg):
                 self.assertIn(pkg, pkgs)
 

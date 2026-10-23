@@ -274,7 +274,7 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
     """Prüft, was kairo-selftest beim ersten und zweiten Start gemeldet hat."""
     pkgs = ["steam", "discord", "firefox", "chromium", "gnome-shell", "amd-ucode",
             "vulkan-radeon", "lib32-vulkan-radeon", "gamemode", "mangohud",
-            "snapper", "snap-pac", "plymouth"]
+            "snapper", "snap-pac", "plymouth", "openai-codex"]
     flatpaks = re.search(r"^FLATPAKS:(.*)$", output, re.MULTILINE)
     flatpaks = flatpaks.group(1) if flatpaks else ""
     mounts = re.search(r"^MOUNTS:(.*)$", output, re.MULTILINE)
@@ -291,8 +291,11 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
         ("Roblox (Sober) installiert", "org.vinegarhq.Sober" in flatpaks),
         ("Spotify installiert", "com.spotify.Client" in flatpaks),
         ("VS Code installiert", "com.visualstudio.code" in flatpaks),
-        ("Claude Code installiert", has(output, r"^CLAUDE=/\S+")),
-        ("Codex installiert", has(output, r"^CODEX=/\S+")),
+        # --version beweist, dass der Befehl wirklich startet (nicht nur da ist)
+        ("Claude Code startet", has(output, r"^CLAUDE=/\S+")
+         and has(output, r"^CLAUDE_VERSION=\d+\.\d+")),
+        ("Codex startet", has(output, r"^CODEX=/\S+")
+         and has(output, r"^CODEX_VERSION=\S*\s*\d+\.\d+")),
         ("Web-Apps Claude und ChatGPT im Menü",
          has(output, r"^kairo-claude\.desktop") and has(output, r"^kairo-chatgpt\.desktop")),
         ("Apps Kairo Update und Kairo Wiederherstellen im Menü",
