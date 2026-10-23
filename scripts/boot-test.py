@@ -57,6 +57,7 @@ CHECK_CMD = (
     "curl -sSI -m 30 https://archlinux.org | head -1; "
     "echo GDM=$(systemctl is-active gdm); echo NM=$(systemctl is-active NetworkManager); "
     "echo LIVEUSER=$(id -nG kairo); loginctl list-sessions --no-legend; "
+    "echo GDM_LOGO=$(DCONF_PROFILE=gdm dconf read /org/gnome/login-screen/logo); "
     "test -x /usr/local/bin/kairo-install && echo INSTALLER=ok; "
     "fastfetch --pipe --logo none; echo '===END'; } 2>&1 | tee /dev/ttyS0"
 )
@@ -265,6 +266,8 @@ def evaluate_live(output, boot, powered_off):
         ("Live-Benutzer kairo ist Administrator (wheel)", has(output, r"^LIVEUSER=.*\bwheel\b")),
         ("Netzwerk: NetworkManager läuft (WLAN im Desktop)", has(output, r"^NM=active")),
         ("Installer kairo-install vorhanden", has(output, r"^INSTALLER=ok")),
+        ("Anmeldebildschirm zeigt das Kairo-Logo",
+         has(output, r"^GDM_LOGO='/usr/local/share/kairo/branding/gdm-logo\.png'")),
         ('fastfetch zeigt "Kairo OS"', has(output, r"OS: Kairo OS")),
         ("Build-Hooks wurden aus dem Live-System entfernt",
          hooks is not None and "kairo-" not in hooks.group(1)),
@@ -310,6 +313,8 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
         ("Kairo Update: Updateprüfung funktioniert", has(output, r"^UPDATE_CHECK=[02]\s*$")),
         ("Kairo-Design installiert (Hintergrund, Logo)",
          has(output, r"^LOGO:.*\bwallpaper\.png") and has(output, r"^LOGO:.*\bgdm-logo\.png")),
+        ("Anmeldebildschirm zeigt das Kairo-Logo",
+         has(output, r"^GDM_LOGO='/usr/local/share/kairo/branding/gdm-logo\.png'")),
         ("Boot-Animation: Theme kairo, splash aktiv", has(output, r"^PLYMOUTH=kairo .*\bsplash\b")),
         ("Btrfs, System auf Subvolume @", has(output, r"^ROOTFS=btrfs subvol=/@\s*$")),
         ("Eigene Subvolumes für /home, /.snapshots, /var/log",

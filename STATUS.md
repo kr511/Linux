@@ -15,10 +15,12 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | ISO bootet in QEMU (UEFI/BIOS) | ✅ | Automatisch per `scripts/boot-test.py` in GitHub Actions: UEFI 13/13, BIOS 12/12. ping nur per HTTPS ersetzt (siehe Protokoll) |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
 | GNOME-Live-System (GDM, Autologin, NetworkManager) | 🟩 | `iso.yml` uefi 18/18, bios 17/17 (0.2 und 1.0) |
-| Kairo-Design (Logo, Hintergrund, Bootmenü) | 🟩 | Im Live-Test sichtbar, Anmeldebildschirm-Logo erst ab nächstem Lauf |
-| `kairo-install` auf leere Festplatte | 🟩 | Läuft durch (0.2: ext4, 1.0: Btrfs + LUKS2), siehe Protokoll |
-| Installiertes System startet | ❌ → 🟨 | Fehlender UEFI-Starteintrag, behoben, Test läuft |
-| Erster Start, Snapshots, Zurückrollen, Update-App | 🟨 | Vorbereitet, Test: `iso.yml` (install, install-crypt) |
+| Kairo-Design (Logo, Hintergrund, Bootmenü, Anmeldebildschirm, Boot-Animation) | ✅ | Screenshots im Lauf 39992597552 |
+| `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 44/44 und 44/44, Lauf 39992597552 |
+| Installiertes System startet, erster Start lädt alle Apps | ✅ | dito |
+| Snapshots und Zurückrollen (`kairo-rollback`) | ✅ | dito, inkl. Neustart nach dem Zurückrollen |
+| Kairo Update (Prüfung, Timer) | ✅ | dito; Update-Fenster selbst nur von Hand testbar |
+| Grafischer Installer (`kairo-install-gui`) | 🟨 | Nur shellcheck; die Fenster kann die CI nicht bedienen |
 | Installation auf deinem echten PC | ⬜ | Erst nach grünem Installationstest |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
@@ -36,6 +38,20 @@ Neue Einträge oben anfügen. Format:
 - Befehl: <exakt>
 - Ergebnis: <bestanden / fehlgeschlagen + Fehlermeldung>
 ```
+
+### 2026-10-23: Kairo 1.0, alle Tests bestanden (GitHub Actions)
+
+- Umgebung: wie unten, Lauf 39992597552 (Branch `kairo-1.0`)
+- Ergebnis: Live UEFI 18/18, Live BIOS 17/17, Installation 44/44,
+  Installation mit Verschlüsselung 44/44: bestanden
+- Behoben seit dem ersten Installationstest: UEFI-Starteintrag
+  (`efibootmgr`), Claude Code unter npm 12 (`kairo-claude-code` führt das
+  Installationsskript des Pakets aus), Codex als Arch-Paket, GDM-Logo
+  (`/etc/dconf/profile/gdm`), Testauswertung (Steuerzeichen, `ls -1`)
+- Nicht automatisch getestet: die Fenster von `kairo-install-gui`,
+  `kairo-update` und `kairo-restore` (die Logik dahinter schon), der
+  Passwort-Dialog beim Start mit Verschlüsselung (der Test entsperrt mit
+  einer Schlüsseldatei), echte AMD-Hardware
 
 ### 2026-10-23: Erster Installationstest (0.2 und 1.0, GitHub Actions)
 

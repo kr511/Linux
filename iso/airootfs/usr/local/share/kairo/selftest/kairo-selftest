@@ -59,6 +59,7 @@ fi
     echo "CRYPT=$(lsblk -rno TYPE | grep -c '^crypt$')"
     echo "SNAPSHOTS=$(snapper --no-dbus -c root list --columns number | grep -cE '^ *[1-9]')"
     echo "PLYMOUTH=$(sed -n 's/^Theme=//p' /etc/plymouth/plymouthd.conf) $(cat /proc/cmdline)"
+    echo "GDM_LOGO=$(DCONF_PROFILE=gdm dconf read /org/gnome/login-screen/logo)"
     echo "UPDATE_TIMER=$(systemctl --global is-enabled kairo-update-check.timer)"
     echo "UPDATE_CHECK=$(sudo -u tester checkupdates >/dev/null 2>&1; echo $?)"
     echo "LOGO: $(find /usr/local/share/kairo/branding/ -maxdepth 1 -type f -printf '%f ')"
