@@ -1,11 +1,12 @@
 
-  Willkommen bei Kairo OS 0.1 (Live)
+  Willkommen bei Kairo OS 0.2 (Live)
 
   Dies ist ein Live-System. Nichts wird auf deine Festplatte geschrieben,
   solange du es nicht selbst ausdrücklich tust.
 
-  Netzwerk:  LAN per DHCP läuft automatisch, WLAN mit  iwctl
-  Systeminfo:  fastfetch
+  Installieren:  kairo-install   (oder "Kairo installieren" im Desktop)
+  Netzwerk:      nmtui
+  Systeminfo:    fastfetch
 
   Kairo basiert auf Arch Linux: https://archlinux.org
 

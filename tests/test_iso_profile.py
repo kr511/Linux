@@ -65,6 +65,77 @@ class OverlayFilesTest(unittest.TestCase):
                         f"Hook kopiert {src}, die Datei fehlt im Overlay")
 
 
+class KairoDesktopTest(unittest.TestCase):
+    """Kairo 0.2: GNOME-Live-System und Installer."""
+
+    AIROOTFS = ISO / "airootfs"
+    SHARE = ISO / "airootfs/usr/local/share/kairo"
+
+    def test_paketliste_installation(self):
+        pkgs = read_package_list(self.SHARE / "packages.target")
+        self.assertEqual(len(pkgs), len(set(pkgs)), "doppelte Pakete")
+        for pkg in pkgs:
+            with self.subTest(paket=pkg):
+                self.assertRegex(pkg, PKGNAME_RE)
+        # Was der Nutzer ausdrücklich wollte: AMD, GNOME, Gaming, Apps
+        for pkg in ["linux-zen", "amd-ucode", "vulkan-radeon", "lib32-vulkan-radeon",
+                    "gnome", "gdm", "steam", "discord", "firefox", "chromium",
+                    "zram-generator", "gamemode", "flatpak", "nodejs", "npm"]:
+            with self.subTest(pflicht=pkg):
+                self.assertIn(pkg, pkgs)
+
+    def test_flatpaks(self):
+        apps = read_package_list(self.SHARE / "flatpaks.target")
+        self.assertEqual(set(apps), {"org.vinegarhq.Sober", "com.spotify.Client",
+                                     "com.visualstudio.code"})
+
+    def test_netzwerk_und_desktop_dienste(self):
+        system = self.AIROOTFS / "etc/systemd/system"
+        # releng-Netzwerk (networkd/iwd) ist maskiert, NetworkManager übernimmt
+        for unit in ["systemd-networkd.service", "systemd-networkd.socket",
+                     "systemd-networkd-wait-online.service", "iwd.service"]:
+            with self.subTest(maskiert=unit):
+                self.assertEqual(os.readlink(system / unit), "/dev/null")
+        self.assertEqual(os.readlink(system / "display-manager.service"),
+                         "/usr/lib/systemd/system/gdm.service")
+        self.assertEqual(os.readlink(system / "default.target"),
+                         "/usr/lib/systemd/system/graphical.target")
+        wants = system / "multi-user.target.wants"
+        self.assertTrue(os.readlink(wants / "NetworkManager.service").endswith("/NetworkManager.service"))
+        self.assertTrue((system / "kairo-live-user.service").is_file())
+
+    def test_build_hooks_werden_entfernt(self):
+        for hook in (self.AIROOTFS / "etc/pacman.d/hooks").glob("*.hook"):
+            with self.subTest(hook=hook.name):
+                self.assertTrue(hook.read_text().startswith("# remove from airootfs!"))
+                self.assertLess(hook.name, "zzzz99-remove-custom-hooks-from-airootfs.hook")
+
+    def test_installiertes_system_behaelt_os_release_hook(self):
+        hook = self.SHARE / "target/etc/pacman.d/hooks/kairo-os-release.hook"
+        self.assertFalse(hook.read_text().startswith("# remove from airootfs!"))
+
+    def test_desktop_eintraege(self):
+        files = [self.AIROOTFS / "usr/share/applications/kairo-install.desktop",
+                 *(self.SHARE / "target/usr/local/share/applications").glob("*.desktop")]
+        self.assertEqual(len(files), 3)
+        icons = self.SHARE / "target/usr/local/share/icons/hicolor/scalable/apps"
+        for f in files:
+            with self.subTest(datei=f.name):
+                ini = configparser.ConfigParser(interpolation=None)
+                ini.optionxform = str
+                ini.read_string(f.read_text())
+                entry = ini["Desktop Entry"]
+                self.assertEqual(entry["Type"], "Application")
+                self.assertTrue(entry["Name"] and entry["Exec"])
+                if entry["Icon"].startswith("kairo-"):
+                    self.assertTrue((icons / f"{entry['Icon']}.svg").is_file())
+
+    def test_selbsttest_nicht_im_normalen_ziel(self):
+        """Der Selbsttest schaltet den PC aus, er darf nie normal mitkommen."""
+        target = self.SHARE / "target"
+        self.assertEqual(list(target.rglob("*selftest*")), [])
+
+
 @unittest.skipUnless(HAVE_RELENG, f"kein releng-Profil unter {RELENG}")
 class AssembledProfileTest(unittest.TestCase):
     """Baut das Profil wirklich zusammen und prüft das Ergebnis."""
@@ -96,7 +167,7 @@ class AssembledProfileTest(unittest.TestCase):
         self.assertEqual(name, "kairo")
         self.assertRegex(label, r"^KAIRO_\d{6}$")
         self.assertLessEqual(len(label), 32)
-        self.assertRegex(version, r"^0\.1-\d{4}\.\d{2}\.\d{2}$")
+        self.assertRegex(version, r"^0\.2-\d{4}\.\d{2}\.\d{2}$")
         self.assertEqual(app, "Kairo OS Live")
 
     def test_bootmodi_von_releng_geerbt(self):
@@ -115,8 +186,24 @@ class AssembledProfileTest(unittest.TestCase):
                     "linux-firmware", *read_package_list(ISO / "packages.kairo.x86_64")]:
             with self.subTest(paket=pkg):
                 self.assertIn(pkg, pkgs)
-        # Kein eigener Kernel in 0.1, erst nach separatem Boot-Test
+        # Kein eigener Kernel im Live-System, erst nach separatem Boot-Test
         self.assertNotIn("linux-kairo", pkgs)
+
+    def test_dateirechte_fuer_skripte(self):
+        """mkarchiso übernimmt keine Rechte aus Git: jedes Skript in
+        /usr/local/bin braucht einen Eintrag in file_permissions."""
+        cmd = ('declare -A file_permissions; source profiledef.sh; '
+               'for k in "${!file_permissions[@]}"; do '
+               'printf "%s=%s\\n" "$k" "${file_permissions[$k]}"; done')
+        result = subprocess.run(["bash", "-c", cmd], cwd=self.out,
+                                check=True, capture_output=True, text=True)
+        perms = dict(l.split("=", 1) for l in result.stdout.splitlines())
+        for script in (ISO / "airootfs/usr/local/bin").iterdir():
+            with self.subTest(skript=script.name):
+                self.assertEqual(perms.get(f"/usr/local/bin/{script.name}"), "0:0:755")
+        self.assertEqual(perms.get("/etc/sudoers.d/kairo-live"), "0:0:440")
+        # Die Einträge aus releng bleiben erhalten
+        self.assertEqual(perms.get("/etc/shadow"), "0:0:400")
 
     def test_bootmenue_umbenannt(self):
         for sub in ["efiboot", "syslinux", "grub"]:

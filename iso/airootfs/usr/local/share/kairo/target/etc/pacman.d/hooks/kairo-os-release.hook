@@ -1,0 +1,15 @@
+# Im installierten Kairo: Nach jedem Update des Pakets "filesystem" würde
+# /usr/lib/os-release wieder "Arch Linux" sagen. Dieser Hook setzt danach
+# jedes Mal die Kairo-Version zurück.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = filesystem
+
+[Action]
+Description = Setze Kairo-Branding in /usr/lib/os-release...
+When = PostTransaction
+Depends = coreutils
+Exec = /usr/bin/install -m 0644 /usr/local/share/kairo/os-release /usr/lib/os-release

@@ -1,0 +1,9 @@
+# Apps von Flathub, die beim ersten Start des installierten Systems
+# nachgeladen werden (kairo-firstboot). Eine App-ID pro Zeile.
+
+# Roblox: Sober ist die Android-Version von Roblox für Linux. Der normale
+# Windows-Client läuft wegen des Anti-Cheats nicht (auch nicht mit Wine).
+org.vinegarhq.Sober
+com.spotify.Client
+# Offizielles VS Code von Microsoft (mit Erweiterungs-Marktplatz)
+com.visualstudio.code

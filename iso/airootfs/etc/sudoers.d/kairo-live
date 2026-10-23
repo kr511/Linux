@@ -1,0 +1,3 @@
+# Nur im Live-System: Der Live-Benutzer darf ohne Passwort root werden,
+# damit der Installer startet. Das installierte System bekommt das NICHT.
+kairo ALL=(ALL:ALL) NOPASSWD: ALL

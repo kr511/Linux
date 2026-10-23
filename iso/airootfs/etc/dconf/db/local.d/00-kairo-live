@@ -1,0 +1,19 @@
+# GNOME-Voreinstellungen für das Live-System
+[org/gnome/shell]
+favorite-apps=['kairo-install.desktop', 'firefox.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Console.desktop']
+
+[org/gnome/desktop/input-sources]
+sources=[('xkb', 'de')]
+
+[org/gnome/desktop/interface]
+color-scheme='prefer-dark'
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+
+# Live-System: kein Sperrbildschirm, kein Abschalten des Bildschirms
+[org/gnome/desktop/screensaver]
+lock-enabled=false
+
+[org/gnome/desktop/session]
+idle-delay=uint32 0

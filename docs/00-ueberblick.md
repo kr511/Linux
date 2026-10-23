@@ -27,7 +27,7 @@ keinen Mehrwert.
  │   kernel.org-Quellcode + Arch-Config + kairo.config         │
  └─────────────────────────────────────────────────────────────┘
  ┌─────────────────────────────────────────────────────────────┐
- │  Desktop (desktop/, packages/)   ── Phase 3, noch leer      │
+ │  Desktop + Installer (ab 0.2): GNOME, kairo-install         │
  └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -35,10 +35,10 @@ keinen Mehrwert.
 
 | Version | Ziel | Fertig, wenn ... |
 | --- | --- | --- |
-| **0.1** | Live-ISO mit Kairo-Branding, offizieller Arch-Kernel | ISO bootet in QEMU (UEFI), siehe [Checkliste](05-checkliste-kairo-0.1.md) |
-| 0.2 | `linux-kairo` einzeln gebaut und getestet | Kernel bootet in einer VM |
-| 0.3 | `linux-kairo` in der ISO | ISO mit eigenem Kernel bootet in QEMU und auf deinem PC |
-| 0.4+ | Installierbares System, Desktop | später |
+| 0.1 ✅ | Live-ISO mit Kairo-Branding, offizieller Arch-Kernel | ISO bootet in QEMU (UEFI), siehe [Checkliste](05-checkliste-kairo-0.1.md) |
+| **0.2** | GNOME-Live-System, Installer `kairo-install`, Gaming-Apps, AMD-Optimierung (Kernel `linux-zen`) | Installationstest in der CI grün, dann auf deinem PC, siehe [06: Installieren](06-installieren.md) |
+| 0.3 | `linux-kairo` einzeln gebaut und getestet | Kernel bootet in einer VM |
+| 0.4 | `linux-kairo` im installierten System | Kernel bootet auf deinem PC |
 
 Immer nur **eine** neue Unbekannte pro Schritt. Wenn ISO und Kernel gleichzeitig
 neu sind und es nicht bootet, weißt du nicht, wer schuld ist.
@@ -52,14 +52,20 @@ neu sind und es nicht bootet, weißt du nicht, wer schuld ist.
 | Kernel bauen | Arch Linux (WSL2) | `makepkg` ist das Arch-Bauwerkzeug |
 | Testen | QEMU (virtuelle Maschine) | kann deinem PC nichts tun |
 
-Die GitHub-CI baut absichtlich **keine** ISO: Das bräuchte mehr Rechte, als
-eine CI für ein Lernprojekt haben sollte.
+Die normale CI (`ci.yml`) baut absichtlich **keine** ISO. Das macht der
+eigene Workflow `iso.yml` auf einer frischen, einmaligen GitHub-VM, siehe
+[02: ISO bauen](02-iso-bauen.md#ohne-eigene-arch-umgebung-in-der-cloud-bauen).
 
 ## Sicherheitsregeln
 
-1. **Keine echten Datenträger.** Alles läuft in Ordnern unter `build/` und `out/`
-   oder in QEMU. Kein Skript hier ruft `dd`, `mkfs`, `fdisk` oder Ähnliches auf.
-2. **Keine Partitionierung.** Die Live-ISO installiert nichts von selbst.
+1. **Keine echten Datenträger beim Bauen und Testen.** Alles läuft in Ordnern
+   unter `build/` und `out/` oder in QEMU. Kein Build- oder Testskript ruft
+   `dd`, `mkfs`, `fdisk` oder Ähnliches auf.
+2. **Genau eine Ausnahme: `kairo-install`.** Der Installer (ab 0.2) löscht
+   die Festplatte, die du auswählst. Er läuft nur im Live-System, nie von
+   selbst, zeigt vorher die Festplatte an und macht erst weiter, wenn du
+   `LÖSCHEN` eintippst. Der USB-Stick, von dem Kairo läuft, steht gar nicht
+   erst zur Auswahl.
 3. **Nichts blind aus dem Internet ausführen.** Kein `curl ... | bash`.
    Pakete kommen aus den signierten Arch-Repos, der Kernel als
    PGP-signierter Tarball von kernel.org.

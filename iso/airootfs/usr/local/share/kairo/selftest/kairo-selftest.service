@@ -1,0 +1,14 @@
+# NUR für den automatischen Installationstest (KAIRO_SELFTEST=1).
+# Schreibt nach dem ersten Start Prüfergebnisse auf die serielle
+# Schnittstelle und schaltet die VM danach aus.
+
+[Unit]
+Description=Kairo Selbsttest (nur automatischer Test)
+After=kairo-firstboot.service display-manager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kairo-selftest
+
+[Install]
+WantedBy=multi-user.target

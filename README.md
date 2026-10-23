@@ -4,7 +4,9 @@ Kairo OS ist eine eigene, bootfähige x86_64-Linux-Distribution auf Basis von
 Arch Linux. Langfristiges Ziel: eigene Live-ISO, eigener Kernel `linux-kairo`
 und eine von Omarchy/Hyprland inspirierte Desktopumgebung.
 
-> **Stand:** Phase 1 (Kairo 0.1). Was davon wirklich gebaut und getestet
+> **Stand:** Kairo 0.2: GNOME-Live-System mit Installer, Steam, Roblox
+> (Sober), Discord, Spotify, VS Code, Claude/ChatGPT, optimiert für AMD.
+> Installieren: [`docs/06-installieren.md`](docs/06-installieren.md). Was davon wirklich gebaut und getestet
 > wurde, steht **nur** in [`STATUS.md`](STATUS.md). Alles andere gilt als
 > "vorbereitet, aber ungetestet".
 
@@ -14,7 +16,7 @@ und eine von Omarchy/Hyprland inspirierte Desktopumgebung.
 | --- | --- |
 | [`iso/`](iso/) | Kairo-Anpassungen für das offizielle Archiso-Profil `releng` |
 | [`kernel/`](kernel/) | `linux-kairo`: PKGBUILD, Kernel-Konfiguration, dokumentierte Patches |
-| [`desktop/`](desktop/) | Platzhalter für die spätere Desktopintegration |
+| [`desktop/`](desktop/) | Platzhalter (der GNOME-Desktop steckt in `iso/airootfs/`) |
 | [`packages/`](packages/) | Platzhalter für eigene Pakete |
 | [`scripts/`](scripts/) | Build- und Testskripte |
 | [`tests/`](tests/) | Automatische Prüfungen (laufen auch in der CI) |

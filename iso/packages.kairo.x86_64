@@ -1,6 +1,9 @@
 # Zusätzliche Pakete für Kairo, werden an die releng-Paketliste angehängt.
 # Nur Pakete aus den offiziellen Arch-Repos [core] und [extra].
 # Eine Zeile pro Paket. Zeilen mit # sind Kommentare.
+#
+# Das ist NUR das Live-System vom USB-Stick. Was auf der Festplatte landet,
+# steht in iso/airootfs/usr/local/share/kairo/packages.target.
 
 # Zeigt Systeminfos samt Distro-Name an. Praktischer Sichttest fürs Branding:
 # Steht nach dem Boot "Kairo OS" da, hat das os-release-Overlay funktioniert.
@@ -8,3 +11,21 @@ fastfetch
 
 # Versionsverwaltung, um im Live-System direkt dieses Repo klonen zu können.
 git
+
+# --- Kairo 0.2: GNOME-Desktop im Live-System ---------------------------------
+# Bewusst nicht die ganze Gruppe "gnome" (60 Pakete): Live braucht nur den
+# Desktop, einen Browser, Dateien, ein Terminal für den Installer und WLAN.
+gdm
+gnome-shell
+gnome-control-center
+gnome-console
+gnome-backgrounds
+gnome-keyring
+nautilus
+xdg-desktop-portal-gnome
+networkmanager
+firefox
+firefox-i18n-de
+zenity
+noto-fonts
+noto-fonts-emoji

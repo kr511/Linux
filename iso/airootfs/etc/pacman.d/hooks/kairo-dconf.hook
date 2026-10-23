@@ -1,0 +1,17 @@
+# remove from airootfs!
+#
+# Übersetzt die GNOME-Voreinstellungen aus /etc/dconf/db/local.d/ in die
+# Datenbank, die GNOME liest. Läuft nur während des ISO-Builds und wird
+# danach (wie kairo-os-release.hook) vom releng-Hook wieder gelöscht.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = dconf
+
+[Action]
+Description = Erzeuge Kairo-GNOME-Voreinstellungen (dconf)...
+When = PostTransaction
+Depends = dconf
+Exec = /usr/bin/dconf update

@@ -33,6 +33,20 @@ klein und lesbar.
 | `airootfs/usr/local/share/kairo/os-release` | Kairo-Identität (`NAME`, `ID=kairo`, `ID_LIKE=arch`) |
 | `airootfs/etc/pacman.d/hooks/kairo-os-release.hook` | Kopiert die os-release beim Build an ihren Platz, löscht sich danach selbst |
 
+Ab Kairo 0.2 (Desktop und Installer):
+
+| Datei | Zweck |
+| --- | --- |
+| `packages.kairo.x86_64` | jetzt auch GNOME (nur das Nötigste), NetworkManager, Firefox |
+| `airootfs/etc/systemd/system/` | GDM statt Textkonsole, NetworkManager statt networkd/iwd (maskiert), Live-Benutzer `kairo` |
+| `airootfs/etc/gdm/custom.conf`, `etc/sudoers.d/kairo-live` | Live-Benutzer meldet sich automatisch an, darf den Installer starten |
+| `airootfs/etc/dconf/` + `kairo-dconf.hook` | GNOME-Voreinstellungen (deutsch, dunkel, Dock) |
+| `airootfs/usr/local/bin/kairo-install` | Installer: ganze Festplatte, GNOME, Apps, AMD |
+| `airootfs/usr/local/share/kairo/packages.target` | Pakete für die Festplatte (inkl. multilib für Steam) |
+| `airootfs/usr/local/share/kairo/flatpaks.target` | Apps, die beim ersten Start nachgeladen werden |
+| `airootfs/usr/local/share/kairo/target/` | Dateien, die der Installer ins neue System kopiert |
+| `airootfs/usr/local/share/kairo/selftest/` | Nur für den automatischen Installationstest |
+
 Zusätzlich ersetzt das Assembly-Skript in den Bootmenüs den sichtbaren Text
 "Arch Linux install medium" durch "Kairo OS Live".
 
