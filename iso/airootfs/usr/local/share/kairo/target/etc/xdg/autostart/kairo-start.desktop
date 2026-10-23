@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Willkommen bei Kairo
+Exec=/usr/local/bin/kairo-start --autostart
+OnlyShowIn=GNOME;
+NoDisplay=true
+X-GNOME-Autostart-Delay=5

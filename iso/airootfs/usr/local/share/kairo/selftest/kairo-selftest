@@ -63,6 +63,7 @@ fi
     echo "UPDATE_TIMER=$(systemctl --global is-enabled kairo-update-check.timer)"
     echo "UPDATE_CHECK=$(sudo -u tester checkupdates >/dev/null 2>&1; echo $?)"
     echo "LOGO: $(find /usr/local/share/kairo/branding/ -maxdepth 1 -type f -printf '%f ')"
+    grep -q 'kairo-start --autostart' /etc/xdg/autostart/kairo-start.desktop && echo "AUTOSTART=kairo-start"
     ls -1 /usr/local/share/applications/
     echo '===SELFTEST_END'
 } > /dev/ttyS0 2>&1

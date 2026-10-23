@@ -1,6 +1,6 @@
 # GNOME-Voreinstellungen für das Live-System
 [org/gnome/shell]
-favorite-apps=['kairo-install.desktop', 'firefox.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Console.desktop']
+favorite-apps=['kairo-install.desktop', 'kairo-hwcheck.desktop', 'firefox.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Console.desktop']
 
 [org/gnome/desktop/input-sources]
 sources=[('xkb', 'de')]

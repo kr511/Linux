@@ -30,9 +30,15 @@ nächsten Start erneut. Protokoll: `journalctl -u kairo-firstboot`.
 
 ## 1. ISO holen
 
-GitHub → **Actions** → **ISO bauen und testen** → neuester grüner Lauf →
-unten **Artifacts** → `kairo-iso` herunterladen und entpacken. Darin liegt
-`kairo-1.0-JJJJ.MM.TT-x86_64.iso` und `SHA256SUMS`.
+Auf der Download-Seite **https://github.com/kr511/Linux/releases/latest**
+unter **Assets** die `kairo-1.0-JJJJ.MM.TT-x86_64.iso` und `SHA256SUMS`
+herunterladen. Jedes Release hat vorher alle automatischen Tests bestanden.
+
+Prüfsumme vergleichen (PowerShell): `Get-FileHash .\kairo-*.iso` muss den
+Wert aus `SHA256SUMS` zeigen.
+
+(Neuere Testversionen gibt es auch unter GitHub → **Actions** → **ISO bauen
+und testen** → grüner Lauf → **Artifacts** → `kairo-iso`.)
 
 ## 2. USB-Stick erstellen (unter Windows)
 
@@ -54,9 +60,10 @@ Beim Einschalten des PCs die Setup-Taste drücken (meist `Entf`, `F2` oder `F12`
 ## 4. Live-System und Installation
 
 1. Im Bootmenü **"Kairo OS Live (x86_64, UEFI)"** wählen (startet nach 15 s von selbst).
-2. Der GNOME-Desktop startet, ein Fenster fragt **"Jetzt auf die Festplatte
-   installieren?"**. Du kannst auch erst ausprobieren. Der Installer ist
-   später im Dock ("Kairo installieren").
+2. Der GNOME-Desktop startet mit einem Begrüßungsfenster. Klicke zuerst auf
+   **Hardware prüfen**: Es zeigt, ob Grafik (AMD-Treiber), WLAN, Ton,
+   Internet und Festplatte passen. Bei ❌ erst das Problem lösen.
+   Beides ("Hardware prüfen", "Kairo installieren") ist auch im Dock links.
 3. Für WLAN: oben rechts auf das Netzwerk-Symbol klicken. LAN geht von selbst.
 4. Der Installer führt dich durch ein paar Fenster:
    - Festplatte auswählen (die Liste zeigt Größe und Modell, der USB-Stick fehlt absichtlich)

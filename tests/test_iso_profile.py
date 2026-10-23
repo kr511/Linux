@@ -117,9 +117,9 @@ class KairoDesktopTest(unittest.TestCase):
         self.assertFalse(hook.read_text().startswith("# remove from airootfs!"))
 
     def test_desktop_eintraege(self):
-        files = [self.AIROOTFS / "usr/share/applications/kairo-install.desktop",
+        files = [*(self.AIROOTFS / "usr/share/applications").glob("*.desktop"),
                  *(self.SHARE / "target/usr/local/share/applications").glob("*.desktop")]
-        self.assertEqual(len(files), 5)
+        self.assertEqual(len(files), 7)
         icon_dirs = [base / "usr/local/share/icons/hicolor/scalable/apps"
                      for base in (self.SHARE / "target", self.AIROOTFS)]
         for f in files:
@@ -237,9 +237,13 @@ class AssembledProfileTest(unittest.TestCase):
         pkgs = (self.out / "packages.x86_64").read_text().split()
         self.assertEqual(len(pkgs), len(set(pkgs)), "doppelte Pakete")
         for pkg in ["linux", "base", "mkinitcpio-archiso", "amd-ucode",
-                    "linux-firmware", *read_package_list(ISO / "packages.kairo.x86_64")]:
+                    "linux-firmware-amdgpu", *read_package_list(ISO / "packages.kairo.x86_64")]:
             with self.subTest(paket=pkg):
                 self.assertIn(pkg, pkgs)
+        # Zu groß für die 2-GiB-Grenze, siehe iso/packages.remove.x86_64
+        for pkg in read_package_list(ISO / "packages.remove.x86_64"):
+            with self.subTest(entfernt=pkg):
+                self.assertNotIn(pkg, pkgs)
         # Kein eigener Kernel im Live-System, erst nach separatem Boot-Test
         self.assertNotIn("linux-kairo", pkgs)
 

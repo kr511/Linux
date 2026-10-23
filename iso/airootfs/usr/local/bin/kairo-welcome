@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Begrüßung nach dem Start des Live-Systems: fragt, ob installiert werden soll.
-zenity --question --width=420 --title="Willkommen bei Kairo OS" \
-    --text="Kairo läuft gerade nur vom USB-Stick, deine Festplatte ist unberührt.\n\nJetzt auf die Festplatte installieren?\n\n(Geht auch später über \"Kairo installieren\" im Dock.)" \
+# Begrüßung nach dem Start des Live-Systems: Hardware prüfen oder installieren.
+choice="$(zenity --question --width=460 --title="Willkommen bei Kairo OS" \
+    --text="Kairo läuft gerade nur vom USB-Stick, deine Festplatte ist unberührt.\n\n<b>Tipp:</b> Erst mit \"Hardware prüfen\" schauen, ob Grafik, WLAN und Ton auf deinem PC passen.\n\n(Beides geht auch später über das Dock links.)" \
     --ok-label="Installieren" --cancel-label="Erst ausprobieren" \
-    && exec gtk-launch kairo-install
+    --extra-button="Hardware prüfen")"
+status=$?
+if [[ "${choice}" == "Hardware prüfen" ]]; then
+    exec /usr/local/bin/kairo-hwcheck
+elif (( status == 0 )); then
+    exec gtk-launch kairo-install
+fi

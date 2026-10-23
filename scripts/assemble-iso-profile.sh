@@ -74,12 +74,15 @@ info "Hänge iso/profiledef.kairo.sh an profiledef.sh an"
     cat -- "${iso_dir}/profiledef.kairo.sh"
 } >> "${out_dir}/profiledef.sh"
 
-# --- 4. Paketliste: releng + Kairo, ohne Duplikate -----------------------------
+# --- 4. Paketliste: releng + Kairo - Entfernte, ohne Duplikate -----------------
 # Kommentare und Leerzeilen fliegen raus, die Reihenfolge bleibt erhalten.
-info "Ergänze Paketliste um iso/packages.kairo.x86_64"
+info "Ergänze Paketliste um iso/packages.kairo.x86_64, ohne iso/packages.remove.x86_64"
+clean_list() { sed -e 's/#.*//' -e 's/[[:space:]]//g' -- "$@" | awk NF; }
 cat -- "${out_dir}/packages.x86_64" "${iso_dir}/packages.kairo.x86_64" \
     | sed -e 's/#.*//' -e 's/[[:space:]]//g' \
-    | awk 'NF && !seen[$0]++' > "${out_dir}/packages.x86_64.new"
+    | awk 'NF && !seen[$0]++' \
+    | grep -vxF -f <(clean_list "${iso_dir}/packages.remove.x86_64") \
+    > "${out_dir}/packages.x86_64.new"
 mv -- "${out_dir}/packages.x86_64.new" "${out_dir}/packages.x86_64"
 
 # --- 5. Bootmenü-Titel umbenennen ---------------------------------------------

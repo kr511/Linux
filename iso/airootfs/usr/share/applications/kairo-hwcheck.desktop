@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Hardware prüfen
+Comment=Prüft, ob Grafik, WLAN, Ton und Festplatte zu Kairo passen
+Exec=/usr/local/bin/kairo-hwcheck
+Icon=kairo-logo
+Terminal=false
+Categories=System;
