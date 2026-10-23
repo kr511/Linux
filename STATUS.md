@@ -12,7 +12,7 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | Statische Tests (`tests/run-all.sh`) | 🟩 | 27 Tests, shellcheck; lokal bestanden |
 | ISO-Profil-Assembly | 🟩 | Gegen echtes releng aus archiso v91 zusammengebaut und geprüft |
 | ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 91, siehe Protokoll |
-| ISO bootet in QEMU (UEFI/BIOS) | 🟩 | Automatisch per `scripts/boot-test.py`: UEFI 12/13, BIOS 11/12, offen nur ping (siehe Protokoll) |
+| ISO bootet in QEMU (UEFI/BIOS) | ✅ | Automatisch per `scripts/boot-test.py` in GitHub Actions: UEFI 13/13, BIOS 12/12. ping nur per HTTPS ersetzt (siehe Protokoll) |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
@@ -30,6 +30,14 @@ Neue Einträge oben anfügen. Format:
 - Befehl: <exakt>
 - Ergebnis: <bestanden / fehlgeschlagen + Fehlermeldung>
 ```
+
+### 2026-10-23: Boot-Test mit HTTPS-Netzwerkprüfung (GitHub Actions)
+
+- Umgebung: wie unten, Lauf 39827915217
+- Ergebnis Build: bestanden, SHA-256
+  `749bad7fb643b64c36790774b96eeed13852bdea59bff5ce29a645eda06d315f`
+- Ergebnis: UEFI 13/13, BIOS 12/12 bestanden. ping weiterhin 0 Antworten
+  (ICMP geblockt), `curl -sSI https://archlinux.org`: `HTTP/2 200`.
 
 ### 2026-10-22: Erster ISO-Build und Boot-Test (GitHub Actions)
 
