@@ -3,6 +3,6 @@ Type=Application
 Name=Kairo Update
 Comment=System und Apps aktualisieren
 Exec=/usr/local/bin/kairo-update
-Icon=software-update-available
+Icon=kairo-logo
 Terminal=false
 Categories=System;Settings;
