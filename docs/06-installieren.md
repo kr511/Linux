@@ -49,6 +49,24 @@ Paket gegen diesen Schlüssel. OpenAIs `install-arch.sh` selbst führt Kairo nic
 aus, weil es sich mit jedem Release ändert. Die Anwendung wird nicht ins
 Live-System oder die ISO gepackt, sondern direkt von OpenAI geladen.
 
+## 0. Vorher erledigen (die gewählte Platte wird unwiederbringlich gelöscht)
+
+Ersetzt du die Platte, auf der Windows liegt, gibt es danach **kein Zurück**
+ohne Neuinstallation von Windows. Hake das vorher ab:
+
+- [ ] Alles Wichtige von dieser Platte auf ein **anderes** Laufwerk kopiert
+      (Dokumente, Bilder, Spielstände, Browser-Lesezeichen, Passwort-Datenbank).
+      Prüfe, dass die Kopie sich öffnen lässt.
+- [ ] Lizenzen und Zugänge notiert: Windows-Aktivierung hängt meist am
+      Microsoft-Konto, Office/Adobe/Spiele-Launcher brauchen eine Neuanmeldung.
+- [ ] Bei **BitLocker** auf der alten Platte: Wiederherstellungsschlüssel aus
+      dem Microsoft-Konto gesichert, falls du Dateien später doch brauchst.
+- [ ] Du weißt, **welche** Platte es ist (Modell und Seriennummer stehen in
+      Windows unter Einstellungen → System → Speicher → Datenträger, oder im
+      Installer). Hängen mehrere Platten im PC, ziehe die anderen zum
+      Installieren ab oder prüfe Modell und Seriennummer in der Liste.
+- [ ] Netzteil/Laptop am Strom, die Installation darf nicht unterbrochen werden.
+
 ## 1. ISO holen
 
 Auf der Download-Seite **https://github.com/kr511/Linux/releases/latest**
@@ -152,3 +170,30 @@ Die Firewall nicht pauschal abschalten.
 | Desktop hängt (installiert) | `Strg+Alt+F3`, anmelden, `sudo kairo-rollback` |
 
 Was davon schon wirklich getestet ist, steht in [`STATUS.md`](../STATUS.md).
+
+## 7. Sicherung (wichtig, auch mit Snapshots)
+
+Snapshots liegen auf **derselben** SSD wie dein System. Sie helfen gegen ein
+missglücktes Update, aber nicht gegen eine defekte SSD, Diebstahl oder
+versehentliches Löschen. Außerdem sind `/home` (deine Dateien) und die
+Snapshots selbst nicht voneinander getrennt gesichert.
+
+Halte darum wichtige Dateien **zusätzlich auf einem zweiten Laufwerk oder in
+der Cloud**. Ein einfacher Anfang: externe Festplatte einstecken und den
+Ordner `/home/<name>` mit der App "Dateien" hinüberkopieren.
+
+## 8. Wenn die Installation scheitert
+
+- Die Meldung steht im Fenster, das ausführliche Protokoll in
+  `/tmp/kairo-install.log`. Das Live-System liegt im Arbeitsspeicher und der
+  Stick ist schreibgeschützt: Das Protokoll geht beim Neustart verloren. Öffne
+  es vorher (`cat /tmp/kairo-install.log`) und fotografiere die letzten Zeilen
+  oder kopiere es auf einen zweiten, eigenen USB-Stick.
+- Nach einem Fehler hängt der Installer die Platte selbst wieder aus. Meist
+  hilft es dann, ihn einfach nochmal zu starten: Er beginnt die gewählte Platte
+  von vorn. (Wurde das Fenster gewaltsam geschlossen oder der PC ausgeschaltet,
+  zuerst neu starten.)
+- Erscheint **"Keine Festplatte gefunden"**, nennt der Installer jetzt den
+  Grund je Platte. Häufigster Fall: Die Platte wurde im Dateimanager angeklickt
+  und ist dadurch eingehängt. Dort auswerfen und den Installer neu starten.
+- Bricht es mit einem Netzwerkfehler ab, WLAN prüfen und neu starten.

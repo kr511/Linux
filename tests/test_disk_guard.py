@@ -59,6 +59,40 @@ class DiskEligibilityTest(unittest.TestCase):
                 self.assertNotEqual(identity, guard.fingerprint(replacement))
 
 
+class RejectionReasonTest(DiskEligibilityTest):
+    """Every rejection must come with a reason the user can act on."""
+
+    def why(self, swaps=frozenset(), holders=lambda _: False):
+        return guard.reason(self.disk, set(swaps), holders)
+
+    def test_usable_disk_has_no_reason(self):
+        self.assertIsNone(self.why())
+
+    def test_reason_agrees_with_eligible(self):
+        cases = [("serial", ""), ("ro", True), ("size", 1024)]
+        for field, value in cases:
+            original = self.disk[field]
+            with self.subTest(field=field):
+                self.disk[field] = value
+                self.assertIsNotNone(self.why())
+                self.assertFalse(self.allowed())
+            self.disk[field] = original
+
+    def test_mounted_partition_is_named_with_advice(self):
+        self.disk["children"][0]["mountpoints"] = ["/run/media/x"]
+        text = self.why()
+        self.assertIn("/dev/vda1", text)
+        self.assertIn("eingehängt", text)
+
+    def test_swap_and_holder_are_named(self):
+        self.assertIn("Swap", self.why(swaps={"/dev/vda1"}))
+        self.assertIn("/dev/vda1", self.why(holders=lambda p: p == "/dev/vda1"))
+
+    def test_missing_identity_explained(self):
+        self.disk["serial"] = ""
+        self.assertIn("Seriennummer", self.why())
+
+
 class InstallerDestructionBoundaryTest(unittest.TestCase):
     def run_installer(self, scenario="ok", confirmation="LÖSCHEN", automatic=True):
         with tempfile.TemporaryDirectory() as directory:
