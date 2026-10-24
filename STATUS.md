@@ -18,7 +18,7 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | Kairo-Design (Logo, Hintergrund, Bootmenü, Anmeldebildschirm, Boot-Animation) | ✅ | Screenshots im Lauf 39992597552 |
 | `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 44/44 und 44/44, Lauf 39992597552 |
 | Installiertes System startet, erster Start lädt alle Apps | ✅ | dito |
-| Native ChatGPT-Desktop-App statt Web-Starter | 🟨 | Ersteinrichtung, Dock und VM-Prüfungen angepasst; diese Änderung noch nicht als ISO/VM getestet. Vorige grüne Läufe enthielten nur die Web-App. |
+| Native ChatGPT-Desktop-App (Web-Starter nur als Ersatz) | 🟨 | Umgebaut nach rotem VM-Test (siehe Protokoll 2026-10-24); neuer ISO-Test läuft |
 | Snapshots und Zurückrollen (`kairo-rollback`) | ✅ | dito, inkl. Neustart nach dem Zurückrollen |
 | Kairo Update (Prüfung, Timer) | ✅ | dito; Update-Fenster selbst nur von Hand testbar |
 | Grafischer Installer (`kairo-install-gui`) | 🟩 | Ablauf mit nachgebauten Fenstern getestet (`tests/test_gui_installer.py`), echte Fenster nur von Hand |
@@ -31,6 +31,39 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | `linux-kairo` in der ISO | ⬜ | Erst nach erfolgreichem Einzeltest (Kairo 0.3) |
 
 ## Testprotokoll
+
+### 2026-10-24: ChatGPT-Installation repariert und umgebaut
+
+- ISO-Test von PR #11 (Lauf 40068021246): ISO, UEFI, BIOS grün; install und
+  install-crypt je 45/48. `chatgpt-bin` fehlte, erster Start nicht fertig.
+- Ursache per neuem Diagnose-Ausdruck im Selbsttest (Journal von
+  kairo-firstboot, Lauf 40076492030): pacman fragt auf Deutsch
+  `Installation fortsetzen? [J/n]`, `yes` antwortet `y`, das gilt als Nein.
+  pacman bricht vor dem Download ab. In den Tests lief alles auf Englisch.
+- Zweites Problem: OpenAIs `install-arch.sh` enthält die Liste der aktuellen
+  Versionen und wird mit jedem Release neu veröffentlicht (zuletzt
+  2026-10-23 19:28 UTC). Die feste Prüfsumme hätte nach dem nächsten Release
+  jede Installation blockiert.
+- Umbau: `kairo-chatgpt-install` führt das Skript nicht mehr aus. Kairo liefert
+  OpenAIs Signaturschlüssel mit (byte-gleich mit
+  `codex-app-prod/linux/repository-signing-key.gpg`, Fingerprint
+  `3BFA0E4A…6C4660E4`), prüft ihn, trägt das Repository mit demselben Inhalt
+  wie OpenAIs Installer ein und installiert mit
+  `pacman -Syu --needed --noconfirm chatgpt-bin` (sprachunabhängig, lehnt
+  Rückfragen wie "Paket entfernen?" ab statt sie zu bestätigen).
+- `kairo-install` installiert ChatGPT schon im chroot; kairo-firstboot holt es
+  nur nach, falls das scheitert. Bis dahin bleibt der Web-Starter als Ersatz
+  im Dock, er wird nach erfolgreicher Installation gelöscht.
+- `chatgpt.desktop` meldet sich für http/https an: `/etc/xdg/mimeapps.list`
+  setzt Firefox als Standardbrowser. `paccache` behält 2 statt 3 Versionen
+  (ChatGPT: über 500 MB pro Version).
+- Arch-Container (podman): Schlüssel geprüft und lokal signiert, Repo-Datenbank
+  besteht `DatabaseRequired TrustedOnly`, `chatgpt-bin 26.1021.22027` samt
+  Abhängigkeiten auflösbar (`--print`, ohne 520-MB-Download); zweiter Lauf
+  trägt nichts doppelt ein; fremder Schlüssel wird abgelehnt.
+- `tests/run-all.sh`: shellcheck, 50 Tests bestanden (8 neue für den Installer,
+  echtes gpg), 2 Kernel-Tests übersprungen. Neue VM-Prüfungen: OpenAI-Repo
+  eingetragen, Web-Starter entfernt, Firefox Standardbrowser.
 
 ### 2026-10-24: Native ChatGPT-App integrieren (noch kein ISO-Test)
 

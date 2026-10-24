@@ -1,0 +1,8 @@
+# Kairo: Firefox ist der Standardbrowser. Ohne diese Zeilen könnte GNOME Links
+# in ChatGPT oder Chromium öffnen, beide melden sich für http/https an.
+# Ändern: Einstellungen -> Apps -> Standard-Apps.
+[Default Applications]
+x-scheme-handler/http=firefox.desktop
+x-scheme-handler/https=firefox.desktop
+text/html=firefox.desktop
+application/xhtml+xml=firefox.desktop

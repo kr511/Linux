@@ -326,6 +326,16 @@ if [[ -n "${KAIRO_SELFTEST:-}" ]]; then
     fi
 fi
 
+# Native ChatGPT-App schon jetzt statt erst beim ersten Start: Dann ist sie bei
+# der ersten Anmeldung da, und der erste Start braucht kein Systemupdate.
+# Vor der snapper-Einrichtung, damit snap-pac dafür keine Snapshots anlegt.
+# Scheitert es, läuft die Installation weiter und kairo-firstboot holt es nach.
+info "Installiere die ChatGPT-App"
+progress 80
+if ! arch-chroot "${mnt}" /usr/local/bin/kairo-chatgpt-install; then
+    printf '%s\n' "ChatGPT ging gerade nicht, Kairo versucht es beim ersten Start erneut." >&2
+fi
+
 # --- 8. System einrichten (im neuen System) ----------------------------------------
 
 info "Richte das System ein"

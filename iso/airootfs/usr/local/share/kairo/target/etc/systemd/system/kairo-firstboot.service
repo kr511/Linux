@@ -1,6 +1,7 @@
 # Lädt beim ersten Start mit Internet die Flatpak-Apps (Roblox/Sober, Spotify,
-# VS Code), die native ChatGPT-App sowie Claude Code nach. Klappt etwas nicht, versucht es der Dienst
-# beim nächsten Start erneut. Protokoll: journalctl -u kairo-firstboot
+# VS Code) und Claude Code nach, dazu ChatGPT, falls das bei der Installation
+# nicht ging. Klappt etwas nicht, versucht es der Dienst beim nächsten Start
+# erneut. Protokoll: journalctl -u kairo-firstboot
 
 [Unit]
 Description=Kairo: Apps beim ersten Start nachladen

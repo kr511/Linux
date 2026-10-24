@@ -1,0 +1,4 @@
+# Kairo: paccache.timer räumt den Paket-Cache jede Woche auf und behält die
+# letzten 2 Versionen jedes Pakets (Standard: 3). Allein ChatGPT braucht pro
+# Version über 500 MB. Ältere Stände gibt es weiter über die Snapshots.
+PACCACHE_ARGS='-k2'

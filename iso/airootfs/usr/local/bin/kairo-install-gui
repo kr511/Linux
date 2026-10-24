@@ -122,7 +122,7 @@ if (( status == 0 )); then
     # "Später" ist kein Fehler: Rückgabewert der Frage ignorieren
     zenity --question --title="${title}" --icon="${icon}" --width="${w}" \
         --ok-label="Jetzt neu starten" --cancel-label="Später" \
-        --text="<big><b>Kairo ist installiert.</b></big>\n\nZiehe nach dem Herunterfahren den USB-Stick ab.$([[ -n "${encrypt}" ]] && printf '\\nBeim Start fragt Kairo nach dem Verschlüsselungs-Passwort.')\n\nBeim ersten Start lädt Kairo im Hintergrund ChatGPT Desktop, Roblox, Spotify, VS Code und Claude Code nach." \
+        --text="<big><b>Kairo ist installiert.</b></big>\n\nZiehe nach dem Herunterfahren den USB-Stick ab.$([[ -n "${encrypt}" ]] && printf '\\nBeim Start fragt Kairo nach dem Verschlüsselungs-Passwort.')\n\nBeim ersten Start lädt Kairo im Hintergrund Roblox, Spotify, VS Code und Claude Code nach." \
         && systemctl reboot
     exit 0
 else

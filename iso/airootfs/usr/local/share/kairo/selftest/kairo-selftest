@@ -48,6 +48,9 @@ fi
     if [[ -x /usr/bin/chatgpt && -r /usr/share/applications/chatgpt.desktop ]]; then
         echo "CHATGPT_DESKTOP=ok"
     fi
+    pacman-conf --repo-list | grep -qx openai-chatgpt && echo "CHATGPT_REPO=ok"
+    # gio = GLib, das gleiche wie GNOME beim Öffnen eines Links
+    echo "BROWSER=$(sudo -u tester LC_ALL=C gio mime x-scheme-handler/https | sed -n 's/^Default application.*: //p')"
     echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
     echo "CLAUDE=$(command -v claude)"
     echo "CLAUDE_VERSION=$(claude --version 2>&1 | head -1)"

@@ -310,6 +310,13 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
          and has(output, r"^CODEX_VERSION=\S*\s*\d+\.\d+")),
         ("Native ChatGPT-App und Desktop-Eintrag vorhanden",
          has(output, r"^CHATGPT=/\S+") and has(output, r"^CHATGPT_DESKTOP=ok")),
+        # Updates für ChatGPT kommen über pacman (Kairo Update), nicht über Kairo
+        ("ChatGPT-Updates: OpenAI-Repository eingetragen", has(output, r"^CHATGPT_REPO=ok")),
+        # Der Web-Starter ist nur Ersatz, solange die native App fehlt
+        ("ChatGPT-Web-Starter nach der Installation entfernt",
+         not has(output, r"^kairo-chatgpt\.desktop")),
+        # chatgpt.desktop meldet sich für http/https an, Links sollen in Firefox aufgehen
+        ("Firefox ist Standardbrowser", has(output, r"^BROWSER=firefox\.desktop\s*$")),
         ("Claude-Web-App im Menü", has(output, r"^kairo-claude\.desktop")),
         ("Apps Kairo Update, Wiederherstellen und Willkommen im Menü",
          has(output, r"^kairo-update\.desktop") and has(output, r"^kairo-restore\.desktop")

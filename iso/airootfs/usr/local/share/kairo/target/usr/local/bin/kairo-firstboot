@@ -8,6 +8,7 @@ set -uo pipefail
 
 failed=0
 
+# Normalerweise schon bei der Installation erledigt, dann sofort fertig
 echo "==> ChatGPT Desktop (native Linux-App)"
 /usr/local/bin/kairo-chatgpt-install || failed=1
 
