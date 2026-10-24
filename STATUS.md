@@ -18,6 +18,7 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | Kairo-Design (Logo, Hintergrund, Bootmenü, Anmeldebildschirm, Boot-Animation) | ✅ | Screenshots im Lauf 39992597552 |
 | `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 44/44 und 44/44, Lauf 39992597552 |
 | Installiertes System startet, erster Start lädt alle Apps | ✅ | dito |
+| Native ChatGPT-Desktop-App statt Web-Starter | 🟨 | Ersteinrichtung, Dock und VM-Prüfungen angepasst; diese Änderung noch nicht als ISO/VM getestet. Vorige grüne Läufe enthielten nur die Web-App. |
 | Snapshots und Zurückrollen (`kairo-rollback`) | ✅ | dito, inkl. Neustart nach dem Zurückrollen |
 | Kairo Update (Prüfung, Timer) | ✅ | dito; Update-Fenster selbst nur von Hand testbar |
 | Grafischer Installer (`kairo-install-gui`) | 🟩 | Ablauf mit nachgebauten Fenstern getestet (`tests/test_gui_installer.py`), echte Fenster nur von Hand |
@@ -30,6 +31,25 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | `linux-kairo` in der ISO | ⬜ | Erst nach erfolgreichem Einzeltest (Kairo 0.3) |
 
 ## Testprotokoll
+
+### 2026-10-24: Native ChatGPT-App integrieren (noch kein ISO-Test)
+
+- Offiziellen Arch-Installer von OpenAI gelesen und SHA-256 auf
+  `a21f493780ad124547a3fb64524cc7909370caf1ecea08a143e1f6c271775ccb`
+  festgelegt. Der Installer prüft Schlüssel und Signaturen und richtet das
+  signierte OpenAI-Repository für `chatgpt-bin` ein.
+- `KAIRO_RELENG_DIR=<archiso v91>/configs/releng tests/run-all.sh`:
+  shellcheck bestanden, 46 Tests bestanden, 2 Kernel-Quellcode-Tests mangels
+  `KAIRO_KERNEL_SRC` übersprungen.
+- Sechs neue Tests prüfen die Installationsgrenze mit nachgebauten Befehlen:
+  bestätigte Installation, geänderter Download, Downloadfehler,
+  Installationsfehler, Wiederholung und fehlende root-Rechte.
+- Web-Starter entfernt; Dock und Willkommen verwenden `chatgpt.desktop` aus
+  dem nativen Paket. VM-Selbsttest prüft zusätzlich Paket, Programmdatei und
+  Desktop-Eintrag. Das prüft noch keinen GUI-Start oder Kontologin.
+- Keine echte ChatGPT-Installation auf dem lokalen Debian-System; keine neue
+  ISO gebaut. Die grünen früheren VM-Ergebnisse gelten weiterhin nur für den
+  damaligen Stand mit Web-App.
 
 Neue Einträge oben anfügen. Format:
 

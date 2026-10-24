@@ -286,7 +286,7 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
     """Prüft, was kairo-selftest beim ersten und zweiten Start gemeldet hat."""
     pkgs = ["steam", "discord", "firefox", "chromium", "gnome-shell", "amd-ucode",
             "vulkan-radeon", "lib32-vulkan-radeon", "gamemode", "mangohud",
-            "snapper", "snap-pac", "plymouth", "openai-codex"]
+            "snapper", "snap-pac", "plymouth", "openai-codex", "chatgpt-bin"]
     flatpaks = re.search(r"^FLATPAKS:(.*)$", output, re.MULTILINE)
     flatpaks = flatpaks.group(1) if flatpaks else ""
     mounts = re.search(r"^MOUNTS:(.*)$", output, re.MULTILINE)
@@ -308,8 +308,9 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
          and has(output, r"^CLAUDE_VERSION=\d+\.\d+")),
         ("Codex startet", has(output, r"^CODEX=/\S+")
          and has(output, r"^CODEX_VERSION=\S*\s*\d+\.\d+")),
-        ("Web-Apps Claude und ChatGPT im Menü",
-         has(output, r"^kairo-claude\.desktop") and has(output, r"^kairo-chatgpt\.desktop")),
+        ("Native ChatGPT-App und Desktop-Eintrag vorhanden",
+         has(output, r"^CHATGPT=/\S+") and has(output, r"^CHATGPT_DESKTOP=ok")),
+        ("Claude-Web-App im Menü", has(output, r"^kairo-claude\.desktop")),
         ("Apps Kairo Update, Wiederherstellen und Willkommen im Menü",
          has(output, r"^kairo-update\.desktop") and has(output, r"^kairo-restore\.desktop")
          and has(output, r"^kairo-start\.desktop")),

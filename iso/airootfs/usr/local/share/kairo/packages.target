@@ -77,7 +77,7 @@ firefox
 firefox-i18n-de
 steam
 discord
-# Für die Web-Apps Claude und ChatGPT (eigenes Fenster ohne Browserleiste)
+# Für die Claude-Web-App (ChatGPT Desktop kommt beim ersten Start aus OpenAIs Repo)
 chromium
 # KI-Assistenten im Terminal: Codex (offizielles Arch-Paket, wird mit dem
 # System aktualisiert) und Claude Code (nur über npm, siehe kairo-firstboot)

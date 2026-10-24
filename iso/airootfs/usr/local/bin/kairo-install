@@ -6,7 +6,7 @@
 #
 # Was installiert wird:
 #   GNOME, linux-zen, AMD-Treiber (Mesa/Vulkan inkl. 32 Bit), Steam, Discord,
-#   Firefox, Web-Apps Claude/ChatGPT, Kairo-Update, Kairo-Wiederherstellen,
+#   Firefox, Claude-Web-App, native ChatGPT-App, Kairo-Update, Kairo-Wiederherstellen,
 #   beim ersten Start per Flatpak: Roblox (Sober), Spotify, VS Code,
 #   dazu Claude Code und Codex (Terminal).
 #   Paketlisten: /usr/local/share/kairo/packages.target, flatpaks.target

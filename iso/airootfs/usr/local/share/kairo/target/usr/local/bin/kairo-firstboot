@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 #
 # Wird einmalig von kairo-firstboot.service ausgeführt (als root).
-# Installiert Apps, die es nicht als Arch-Paket gibt. Erst wenn alles
+# Installiert zusätzliche Apps aus ihren offiziellen Quellen. Erst wenn alles
 # geklappt hat, wird /var/lib/kairo/firstboot-done angelegt.
 
 set -uo pipefail
 
 failed=0
+
+echo "==> ChatGPT Desktop (native Linux-App)"
+/usr/local/bin/kairo-chatgpt-install || failed=1
 
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
     || failed=1
