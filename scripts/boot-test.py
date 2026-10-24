@@ -271,15 +271,23 @@ def unlock(vm, args, prefix):
         vm.qmp.screenshot(path)
         result = subprocess.run(["tesseract", str(path), "stdout", "-l", "eng+deu",
                                  "--psm", "11"], check=True, capture_output=True, text=True)
+        seen["text"] = " ".join(result.stdout.split())
         return re.search(r"passwor|passwör|passphrase|entsperr|unlock", result.stdout, re.I)
 
+    seen = {"text": ""}
     deadline = time.monotonic() + args.boot_timeout
+    attempt = 0
     while time.monotonic() < deadline:
         if dialog("passwortdialog"):
             break
+        attempt += 1
+        # Ohne diese Zeile sieht man im CI-Log nicht, was der Test auf dem Bildschirm erkennt
+        if attempt in (1, 2, 3) or attempt % 6 == 0:
+            log(f"Dialog nicht erkannt, OCR sieht: {seen['text'][:200]!r}")
         time.sleep(10)
     else:
-        raise RuntimeError("Kein sichtbarer Verschlüsselungsdialog; siehe Screenshot")
+        raise RuntimeError("Kein sichtbarer Verschlüsselungsdialog; OCR sah zuletzt: "
+                           f"{seen['text'][:300]!r}; siehe Screenshot")
     vm.qmp.type_german("Falsch-yz_19!\n")
     time.sleep(20)
     if "===SELFTEST_BEGIN" in vm.serial.read_text(errors="replace") or not dialog("falsches-passwort"):
