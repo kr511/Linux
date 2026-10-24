@@ -35,7 +35,8 @@ done
 
 mapfile -t disks < <(sudo /usr/local/bin/kairo-install --list-disks)
 if (( ${#disks[@]} == 0 )); then
-    error "Keine Festplatte gefunden, auf die Kairo installiert werden kann."
+    why="$(sudo /usr/local/bin/kairo-install --why-rejected 2>/dev/null | awk -F '\t' '{print $1 ": " $2}')" || why=""
+    error "Keine Festplatte gefunden, auf die Kairo installiert werden kann.${why:+\n\nAbgelehnt wurden:\n${why}}"
     exit 1
 fi
 rows=()

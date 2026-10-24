@@ -23,6 +23,7 @@
 #   kairo-install                 Fragen im Terminal
 #   kairo-install-gui             dasselbe mit Fenstern (ruft dieses Skript)
 #   kairo-install --list-disks    wählbare Festplatten (für die GUI)
+#   kairo-install --why-rejected  abgelehnte Festplatten samt Grund
 #
 # Ohne Rückfragen (GUI und automatische Tests):
 #   KAIRO_DISK=/dev/vda KAIRO_USER=name KAIRO_YES=1
@@ -62,6 +63,11 @@ read_secret_file() {
 # Festplatten, auf die installiert werden darf: keine CDs, kein zram/loop,
 # und nie der USB-Stick, von dem Kairo gerade läuft
 list_disks() { python3 "${disk_guard}" list; }
+
+if [[ "${1:-}" == --why-rejected ]]; then
+    python3 "${disk_guard}" rejected
+    exit 0
+fi
 
 if [[ "${1:-}" == --list-disks ]]; then
     # Gerät, GiB, Modell, Seriennummer/WWN, Identitäts-Hash.
@@ -105,7 +111,12 @@ echo "Internet ok"
 
 disk_rows="$(list_disks)" || die "Laufwerksprüfung fehlgeschlagen."
 mapfile -t disks < <(printf '%s\n' "${disk_rows}" | cut -f1 | sed '/^$/d')
-(( ${#disks[@]} )) || die "Keine Festplatte gefunden."
+if (( ${#disks[@]} == 0 )); then
+    rejected="$(python3 "${disk_guard}" rejected 2>/dev/null | awk -F '\t' '{print "  " $1 ": " $2}')" || rejected=""
+    die "Keine Festplatte gefunden, auf die Kairo installiert werden kann.${rejected:+
+Abgelehnt wurden:
+${rejected}}"
+fi
 
 if [[ -n "${KAIRO_DISK:-}" ]]; then
     disk="${KAIRO_DISK}"
