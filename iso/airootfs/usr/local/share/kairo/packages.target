@@ -54,6 +54,9 @@ ttf-liberation
 
 # --- Snapshots, Verschlüsselung, Boot-Animation, Kairo-Apps -------------------------
 btrfs-progs
+# arch-chroot: kairo-rollback braucht es, um nach dem Zurückrollen Kernel und
+# Initramfs im wiederhergestellten System neu zu erzeugen (Lauf 40089970237)
+arch-install-scripts
 snapper
 # Snapshot vor und nach jedem pacman-Lauf
 snap-pac

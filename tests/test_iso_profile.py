@@ -82,7 +82,8 @@ class KairoDesktopTest(unittest.TestCase):
                     "gnome", "gdm", "steam", "discord", "firefox", "chromium",
                     "zram-generator", "gamemode", "flatpak", "nodejs", "npm",
                     "btrfs-progs", "snapper", "snap-pac", "cryptsetup", "plymouth",
-                    "zenity", "libnotify", "terminus-font", "openai-codex"]:
+                    "zenity", "libnotify", "terminus-font", "openai-codex",
+                    "arch-install-scripts"]:  # kairo-rollback ruft arch-chroot auf
             with self.subTest(pflicht=pkg):
                 self.assertIn(pkg, pkgs)
 
@@ -292,6 +293,22 @@ class AssembledProfileTest(unittest.TestCase):
                 capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertTrue((Path(d) / "wichtig.txt").exists())
+
+
+class RollbackPreflightTest(unittest.TestCase):
+    """kairo-rollback darf nichts verändern, bevor feststeht, dass es fertig werden kann."""
+
+    SCRIPT = (ISO / "airootfs/usr/local/bin/kairo-rollback").read_text()
+
+    def test_werkzeuge_werden_vor_dem_austausch_von_at_geprueft(self):
+        check = self.SCRIPT.index('command -v "${tool}"')
+        first_change = self.SCRIPT.index('mv "${top}/@"')
+        self.assertLess(check, first_change)
+
+    def test_arch_chroot_ist_im_installierten_system(self):
+        pkgs = read_package_list(ISO / "airootfs/usr/local/share/kairo/packages.target")
+        self.assertIn("arch-chroot", self.SCRIPT)
+        self.assertIn("arch-install-scripts", pkgs)
 
 
 if __name__ == "__main__":

@@ -126,6 +126,14 @@ fi
 
 # --- Zurücksetzen ----------------------------------------------------------------
 
+# Vor der ersten Änderung prüfen, was später gebraucht wird. Fehlt arch-chroot erst
+# nach dem Austauschen von @, bliebe ein halb zurückgerollter Zustand zurück.
+# (Das Auflisten oben braucht beides nicht.)
+for tool in arch-chroot btrfs; do
+    command -v "${tool}" >/dev/null \
+        || die "${tool} fehlt (Pakete arch-install-scripts, btrfs-progs). Nichts wurde verändert."
+done
+
 stamp="$(date +%Y%m%d-%H%M%S)"
 info "Sichere jetziges System als @kairo-alt-${stamp}"
 mv "${top}/@" "${top}/@kairo-alt-${stamp}"
