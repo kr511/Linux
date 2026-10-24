@@ -31,7 +31,13 @@ if ! installed; then
     # Ganze Schlüsseldatei prüfen, bevor pacman ihr vertraut: genau ein
     # Hauptschlüssel, und zwar der festgehaltene
     gnupg_home="$(mktemp -d)"
-    trap 'rm -rf -- "${gnupg_home}"' EXIT
+    cleanup() {
+        rm -rf -- "${gnupg_home}"
+        # pacman-key lässt gpg-agent laufen. Im chroot von kairo-install hielte
+        # er die neue Festplatte fest, sie ließe sich am Ende nicht aushängen.
+        gpgconf --homedir /etc/pacman.d/gnupg --kill gpg-agent 2>/dev/null || true
+    }
+    trap cleanup EXIT
     fingerprints="$(gpg --homedir "${gnupg_home}" --batch --show-keys --with-colons "${key_file}" |
         awk -F: '$1 == "pub" { primary = 1 } $1 == "sub" { primary = 0 }
                  $1 == "fpr" && primary { print $10; primary = 0 }')"

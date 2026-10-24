@@ -61,6 +61,10 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
   besteht `DatabaseRequired TrustedOnly`, `chatgpt-bin 26.1021.22027` samt
   Abhängigkeiten auflösbar (`--print`, ohne 520-MB-Download); zweiter Lauf
   trägt nichts doppelt ein; fremder Schlüssel wird abgelehnt.
+- Gefunden vor dem ISO-Test: `pacman-key` lässt gpg-agent laufen. Im chroot
+  von kairo-install hätte er die Festplatte beim Aushängen blockiert. Das
+  Skript beendet ihn jetzt; im Container geprüft (ohne Änderung bleibt ein
+  gpg-agent übrig, mit Änderung keiner).
 - `tests/run-all.sh`: shellcheck, 50 Tests bestanden (8 neue für den Installer,
   echtes gpg), 2 Kernel-Tests übersprungen. Neue VM-Prüfungen: OpenAI-Repo
   eingetragen, Web-Starter entfernt, Firefox Standardbrowser.
