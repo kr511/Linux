@@ -2,7 +2,7 @@
 #
 # - keine Secrets, nur Lesezugriff aufs Repo
 # - kein "docker --privileged", kein Mounten, kein Loop-Device
-# - es wird KEINE ISO und KEIN Kernel gebaut (das passiert lokal, siehe docs/)
+# - vollständige Builds laufen getrennt in iso.yml und kernel.yml
 #
 # Actions sind auf Commit-Hashes gepinnt: Ein Tag wie "v7" kann nachträglich
 # auf anderen Code zeigen, ein Hash nicht.
@@ -10,6 +10,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:

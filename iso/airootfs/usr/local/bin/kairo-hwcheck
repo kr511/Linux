@@ -86,9 +86,9 @@ fi
 mapfile -t disks < <(/usr/local/bin/kairo-install --list-disks 2>/dev/null)
 big=0
 for d in "${disks[@]}"; do
-    IFS=$'\t' read -r dev size model <<<"${d}"
+    IFS=$'\t' read -r dev size model serial _ <<<"${d}"
     (( size >= 32 )) && big=1
-    add OK "Festplatte" "${dev}: ${size} GiB ${model}"
+    add OK "Festplatte" "${dev}: ${size} GiB ${model} (Seriennummer ${serial})"
 done
 if (( ${#disks[@]} == 0 )); then
     add FEHLER "Festplatte" "Keine Festplatte gefunden"

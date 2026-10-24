@@ -67,7 +67,8 @@ CHECK_CMD = (
 # Schlüsseldatei, die kairo-install nur im Testmodus anlegt).
 INSTALL_CMD = ("KAIRO_DISK=/dev/vda KAIRO_USER=tester KAIRO_PASSWORD=kairotest "
                "KAIRO_YES=1 KAIRO_SELFTEST=1 kairo-install")
-INSTALL_CMD_CRYPT = "KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD=kairotest1 " + INSTALL_CMD
+CRYPT_PASSWORD = "Kairo-yz_19!"
+INSTALL_CMD_CRYPT = f"KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD='{CRYPT_PASSWORD}' " + INSTALL_CMD
 
 # Tastenbelegung US (Standard der Live-Konsole): Zeichen -> QEMU-Tastencode
 KEYS = {" ": "spc", "-": "minus", "=": "equal", "/": "slash", ".": "dot",
@@ -138,6 +139,21 @@ class Qmp:
         self.cmd("screendump", filename=str(path), format="png")
         log(f"Screenshot: {path.name}")
 
+    def type_german(self, text):
+        # Physical QEMU keys interpreted by de-latin1, not pasted US text.
+        for ch in text:
+            if ch in "yYzZ":
+                code = {"y": "z", "z": "y"}[ch.lower()]
+                self.keys(*(["shift", code] if ch.isupper() else [code]))
+            elif ch == "_":
+                self.keys("shift", "slash")
+            elif ch == "!":
+                self.keys("shift", "1")
+            elif ch == "-":
+                self.keys("slash")
+            else:
+                self.type(ch)
+
 
 def wait_for(path, needles, timeout, poke=None, every=10, first_poke=0):
     """Wartet, bis einer der Texte in der Datei steht, und gibt ihn zurück.
@@ -186,7 +202,7 @@ class Vm:
                     "-device", "scsi-cd,bus=scsi0.0,drive=cdrom0",
                     "-drive", f"id=cdrom0,if=none,format=raw,media=cdrom,read-only=on,file={iso}"]
         if disk:
-            cmd += ["-drive", f"file={disk},if=virtio,format=qcow2"]
+            cmd += ["-drive", f"file={disk},if=virtio,format=qcow2,serial=KAIRO-VM-SSD"]
         if uefi:
             code, varsf = next(((c, v) for c, v in OVMF_CANDIDATES
                                 if Path(c).is_file() and Path(v).is_file()), (None, None))
@@ -242,18 +258,45 @@ def has(output, pattern):
     return re.search(pattern, output, re.MULTILINE) is not None
 
 
+def unlock(vm, args, prefix):
+    """Exercise the visible Plymouth dialog; never install a test unlock key."""
+    if not args.encrypt:
+        return
+
+    def dialog(name):
+        path = args.out / f"{prefix}-{name}.png"
+        vm.qmp.screenshot(path)
+        result = subprocess.run(["tesseract", str(path), "stdout", "-l", "eng+deu",
+                                 "--psm", "11"], check=True, capture_output=True, text=True)
+        return re.search(r"passwor|passwör|passphrase|entsperr|unlock", result.stdout, re.I)
+
+    deadline = time.monotonic() + args.boot_timeout
+    while time.monotonic() < deadline:
+        if dialog("passwortdialog"):
+            break
+        time.sleep(10)
+    else:
+        raise RuntimeError("Kein sichtbarer Verschlüsselungsdialog; siehe Screenshot")
+    vm.qmp.type_german("Falsch-yz_19!\n")
+    time.sleep(20)
+    if "===SELFTEST_BEGIN" in vm.serial.read_text(errors="replace") or not dialog("falsches-passwort"):
+        raise RuntimeError("Falsches Passwort wurde nicht nachweisbar abgewiesen")
+    vm.qmp.type_german(CRYPT_PASSWORD + "\n")
+    log("Passwort am echten Dialog eingegeben (deutsche Belegung, y/z, Sonderzeichen)")
+
+
 def evaluate_live(output, boot, powered_off):
     """Prüft die Ausgabe gegen docs/05-checkliste-kairo-0.1.md (plus GNOME)."""
     hooks = re.search(r"^HOOKS:(.*)$", output, re.MULTILINE)
     checks = [
         ("Login als root, Hostname kairo (Prompt root@kairo)",
          has(output, r"^root\s*$") and has(output, r"^kairo\s*$")),
-        ('Begrüßung "Willkommen bei Kairo OS 1.0"', has(output, r"Willkommen bei Kairo OS 1\.0")),
+        ('Begrüßung "Willkommen bei Kairo OS 1.0"', has(output, r"Willkommen bei Kairo OS 1\.0\.1")),
         ('os-release: NAME="Kairo OS"', has(output, r'^NAME="Kairo OS"')),
         ("os-release: ID=kairo", has(output, r"^ID=\"?kairo\"?\s*$")),
         ("os-release: ID_LIKE=arch", has(output, r"^ID_LIKE=\"?arch\"?\s*$")),
         ("os-release: IMAGE_VERSION=1.0-<datum>",
-         has(output, r"^IMAGE_VERSION=\"?1\.0-\d{4}\.\d\d\.\d\d")),
+         has(output, r"^IMAGE_VERSION=\"?1\.0\.1-\d{4}\.\d\d\.\d\d")),
         ("hostnamectl: Static hostname: kairo", has(output, r"Static hostname: kairo\b")),
         ("hostnamectl: Operating System: Kairo OS", has(output, r"Operating System: Kairo OS")),
         # GitHub-Runner (Azure) lassen kein ICMP nach außen durch, ping bekommt
@@ -298,6 +341,9 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
         ("Kernel linux-zen", has(output, r"^KERNEL=\S*zen")),
         ("Desktop: GDM läuft", has(output, r"^GDM=active")),
         ("Netzwerk: NetworkManager läuft", has(output, r"^NM=active")),
+        ("Firewall aktiv und beim Start aktiviert", has(output, r"^FIREWALL=active enabled$")),
+        ("Firewall: externer IPv4/IPv6-Prüfclient, Kontrollmessung und ausgehender Verkehr",
+         has(output, r"^FIREWALL_PROBE=ok$")),
         *((f"Paket {p} installiert", has(output, rf"^{re.escape(p)} \S+")) for p in pkgs),
         ("Erster Start: Apps nachgeladen (kairo-firstboot)", has(output, r"^FIRSTBOOT_DONE=ja")),
         ("Roblox (Sober) installiert", "org.vinegarhq.Sober" in flatpaks),
@@ -310,6 +356,13 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
          and has(output, r"^CODEX_VERSION=\S*\s*\d+\.\d+")),
         ("Native ChatGPT-App und Desktop-Eintrag vorhanden",
          has(output, r"^CHATGPT=/\S+") and has(output, r"^CHATGPT_DESKTOP=ok")),
+        # Updates für ChatGPT kommen über pacman (Kairo Update), nicht über Kairo
+        ("ChatGPT-Updates: OpenAI-Repository eingetragen", has(output, r"^CHATGPT_REPO=ok")),
+        # Der Web-Starter ist nur Ersatz, solange die native App fehlt
+        ("ChatGPT-Web-Starter nach der Installation entfernt",
+         not has(output, r"^kairo-chatgpt\.desktop")),
+        # chatgpt.desktop meldet sich für http/https an, Links sollen in Firefox aufgehen
+        ("Firefox ist Standardbrowser", has(output, r"^BROWSER=firefox\.desktop\s*$")),
         ("Claude-Web-App im Menü", has(output, r"^kairo-claude\.desktop")),
         ("Apps Kairo Update, Wiederherstellen und Willkommen im Menü",
          has(output, r"^kairo-update\.desktop") and has(output, r"^kairo-restore\.desktop")
@@ -426,7 +479,7 @@ def run_install(args, tmp):
         time.sleep(2)
 
         log("Starte kairo-install (ohne Rückfragen)")
-        vm.qmp.type((INSTALL_CMD_CRYPT if args.encrypt else INSTALL_CMD) + "\n")
+        vm.qmp.type((INSTALL_CMD_CRYPT if args.encrypt else "KAIRO_ENCRYPT=0 " + INSTALL_CMD) + "\n")
         started = time.monotonic()
         result = None
         while result is None and time.monotonic() - started < args.install_timeout:
@@ -462,6 +515,7 @@ def run_install(args, tmp):
         vm.qmp.screenshot(args.out / "install-4-bootmenue.png")
         time.sleep(6)
         vm.qmp.screenshot(args.out / "install-4-boot-animation.png")
+        unlock(vm, args, "install-4")
         # "Shell>": Die Firmware hat keinen Starteintrag gefunden und ist in
         # der EFI-Shell gelandet. Dann sofort abbrechen statt 90 Minuten warten
         result = wait_for(serial2, ["===SELFTEST_END", "Shell> "], args.install_timeout)
@@ -487,6 +541,7 @@ def run_install(args, tmp):
     vm = Vm(tmp, serial3, disk=disk)
     powered_off = False
     try:
+        unlock(vm, args, "install-6")
         if wait_for(serial3, "===ROLLBACK_END", 900):
             vm.qmp.screenshot(args.out / "install-6-nach-rollback.png")
         else:

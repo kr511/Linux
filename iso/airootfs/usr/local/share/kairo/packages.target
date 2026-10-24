@@ -5,6 +5,7 @@
 # --- Grundsystem ---------------------------------------------------------------
 base
 base-devel
+python
 # Kernel mit Gaming-/Desktop-Optimierungen (besserer Scheduler, niedrigere
 # Latenz). Der eigene linux-kairo kommt erst nach eigenem Boot-Test.
 linux-zen
@@ -35,6 +36,7 @@ gnome
 gnome-tweaks
 gdm
 networkmanager
+nftables
 bluez
 bluez-utils
 pipewire
@@ -77,7 +79,7 @@ firefox
 firefox-i18n-de
 steam
 discord
-# Für die Claude-Web-App (ChatGPT Desktop kommt beim ersten Start aus OpenAIs Repo)
+# Für die Claude-Web-App und den ChatGPT-Ersatz (ChatGPT Desktop kommt aus OpenAIs Repo)
 chromium
 # KI-Assistenten im Terminal: Codex (offizielles Arch-Paket, wird mit dem
 # System aktualisiert) und Claude Code (nur über npm, siehe kairo-firstboot)

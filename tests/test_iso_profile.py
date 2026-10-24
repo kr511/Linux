@@ -119,7 +119,8 @@ class KairoDesktopTest(unittest.TestCase):
     def test_desktop_eintraege(self):
         files = [*(self.AIROOTFS / "usr/share/applications").glob("*.desktop"),
                  *(self.SHARE / "target/usr/local/share/applications").glob("*.desktop")]
-        self.assertEqual(len(files), 6)
+        # 7 = Live-System und Kairo-Starter, inkl. ChatGPT-Web-Ersatz (bis die App da ist)
+        self.assertEqual(len(files), 7)
         icon_dirs = [base / "usr/local/share/icons/hicolor/scalable/apps"
                      for base in (self.SHARE / "target", self.AIROOTFS)]
         for f in files:
@@ -221,7 +222,7 @@ class AssembledProfileTest(unittest.TestCase):
         self.assertEqual(name, "kairo")
         self.assertRegex(label, r"^KAIRO_\d{6}$")
         self.assertLessEqual(len(label), 32)
-        self.assertRegex(version, r"^1\.0-\d{4}\.\d{2}\.\d{2}$")
+        self.assertRegex(version, r"^1\.0\.1-\d{4}\.\d{2}\.\d{2}$")
         self.assertEqual(app, "Kairo OS Live")
 
     def test_bootmodi_von_releng_geerbt(self):

@@ -39,6 +39,8 @@ fi
     echo "KERNEL=$(uname -r)"
     echo "GDM=$(systemctl is-active gdm)"
     echo "NM=$(systemctl is-active NetworkManager)"
+    echo "FIREWALL=$(systemctl is-active nftables) $(systemctl is-enabled nftables)"
+    python3 /usr/local/lib/kairo-firewall-test.py
     echo "FIRSTBOOT_DONE=$(test -e /var/lib/kairo/firstboot-done && echo ja || echo nein)"
     # | cat: sonst schreibt pacman Steuerzeichen für den Cursor auf das Terminal
     pacman -Q --color never steam discord firefox chromium gnome-shell linux-zen amd-ucode \
@@ -48,6 +50,9 @@ fi
     if [[ -x /usr/bin/chatgpt && -r /usr/share/applications/chatgpt.desktop ]]; then
         echo "CHATGPT_DESKTOP=ok"
     fi
+    pacman-conf --repo-list | grep -qx openai-chatgpt && echo "CHATGPT_REPO=ok"
+    # gio = GLib, das gleiche wie GNOME beim Öffnen eines Links
+    echo "BROWSER=$(sudo -u tester LC_ALL=C gio mime x-scheme-handler/https | sed -n 's/^Default application.*: //p')"
     echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
     echo "CLAUDE=$(command -v claude)"
     echo "CLAUDE_VERSION=$(claude --version 2>&1 | head -1)"
@@ -69,6 +74,12 @@ fi
     echo "LOGO: $(find /usr/local/share/kairo/branding/ -maxdepth 1 -type f -printf '%f ')"
     grep -q 'kairo-start --autostart' /etc/xdg/autostart/kairo-start.desktop && echo "AUTOSTART=kairo-start"
     ls -1 /usr/local/share/applications/
+    # Ohne Protokoll lässt sich ein fehlgeschlagener erster Start nicht klären
+    if [[ ! -e /var/lib/kairo/firstboot-done ]]; then
+        echo '===FIRSTBOOT_LOG_BEGIN'
+        journalctl -u kairo-firstboot -b --no-pager -o cat | grep -v '^y$' | tail -n 150
+        echo '===FIRSTBOOT_LOG_END'
+    fi
     echo '===SELFTEST_END'
 } > /dev/ttyS0 2>&1
 

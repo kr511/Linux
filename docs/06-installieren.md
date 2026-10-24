@@ -20,27 +20,34 @@
 Wine, weil der Anti-Cheat das blockiert. Sober ist die Android-Version von
 Roblox für Linux. Die meisten Spiele laufen, aber nicht alle.
 
-**ChatGPT:** Kairo installiert beim ersten Start die offizielle native Linux-App
-aus OpenAIs signiertem pacman-Repository. Der alte Web-App-Starter entfällt.
-Danach im App-Menü oder Dock **ChatGPT** öffnen und mit deinem Konto anmelden.
-Updates kommen über **Kairo Update** / `pacman -Syu`.
+**ChatGPT:** Kairo installiert die offizielle native Linux-App schon während
+der Installation, aus OpenAIs signiertem pacman-Repository. Nach dem ersten
+Anmelden im App-Menü oder Dock **ChatGPT** öffnen und mit deinem Konto anmelden.
+Updates kommen über **Kairo Update** / `pacman -Syu`. Links aus ChatGPT öffnen
+sich in Firefox (Standardbrowser, änderbar unter Einstellungen → Apps).
 [Offizielle Anleitung](https://learn.chatgpt.com/docs/linux/linux-app).
 
 **Claude:** Der Kairo-Starter öffnet weiterhin die Webseite in einem eigenen
 Fenster. Claude Code im Terminal ist ein separates Programm. Claude Desktop
 für Linux gibt es als Beta für Ubuntu/Debian; es ist hier nicht integriert.
 
-ChatGPT Desktop, Roblox (Sober), Spotify, VS Code und Claude Code werden beim **ersten Start**
+Roblox (Sober), Spotify, VS Code und Claude Code werden beim **ersten Start**
 im Hintergrund aus dem Internet geladen. Nach ein paar Minuten tauchen sie im
 App-Menü auf. Klappt es nicht (z. B. kein Internet), versucht Kairo es beim
 nächsten Start erneut. Protokoll: `journalctl -u kairo-firstboot`.
 
-Der ChatGPT-Installer wird vor der Ausführung mit einer fest hinterlegten
-SHA-256-Prüfsumme geprüft. Ändert OpenAI das Skript, wird die Installation
-abgebrochen, bis die neue Version geprüft und die Prüfsumme aktualisiert ist.
-Eine Wiederholung ist mit `sudo kairo-chatgpt-install` möglich. Die offizielle
-Installation führt ein vollständiges Systemupdate durch; bei einem neuen
-Kernel danach neu starten. Die Anwendung wird nicht im Live-System installiert.
+Ging ChatGPT während der Installation nicht (z. B. Internet weg), holt der
+erste Start es nach. Bis dahin öffnet **ChatGPT** im Dock die Webseite in einem
+eigenen Fenster; sobald die Desktop-App da ist, verschwindet dieser Ersatz.
+Von Hand: `sudo kairo-chatgpt-install`.
+
+Wie Kairo ChatGPT einrichtet: OpenAIs Signaturschlüssel liegt in Kairo
+(`/usr/local/share/kairo/openai-chatgpt.gpg`, Fingerprint
+`3BFA0E4AE8B8CC16A2D9BA684A3B4A566C4660E4`). Kairo prüft ihn, trägt das
+Repository genau so ein wie OpenAIs Installer, und pacman prüft Paketliste und
+Paket gegen diesen Schlüssel. OpenAIs `install-arch.sh` selbst führt Kairo nicht
+aus, weil es sich mit jedem Release ändert. Die Anwendung wird nicht ins
+Live-System oder die ISO gepackt, sondern direkt von OpenAI geladen.
 
 ## 1. ISO holen
 
@@ -80,9 +87,12 @@ Beim Einschalten des PCs die Setup-Taste drücken (meist `Entf`, `F2` oder `F12`
    Beides ("Hardware prüfen", "Kairo installieren") ist auch im Dock links.
 3. Für WLAN: oben rechts auf das Netzwerk-Symbol klicken. LAN geht von selbst.
 4. Der Installer führt dich durch ein paar Fenster:
-   - Festplatte auswählen (die Liste zeigt Größe und Modell, der USB-Stick fehlt absichtlich)
+   - Festplatte auswählen (die Liste zeigt Größe, Modell und Seriennummer;
+     belegte oder nicht eindeutig identifizierbare Laufwerke fehlen ebenso
+     wie der Live-Stick). Nur die separate leere SSD anschließen.
    - Benutzername und Passwort festlegen
-   - **Verschlüsseln oder nicht.** Mit Verschlüsselung fragt Kairo bei jedem
+   - **Verschlüsseln oder nicht.** Verschlüsselung ist vorausgewählt.
+     Abbrechen beendet die Installation. Mit Verschlüsselung fragt Kairo bei jedem
      Start nach einem eigenen Passwort (mindestens 8 Zeichen, deutsche
      Tastatur). Ohne dieses Passwort kommt niemand an deine Daten, auch du
      nicht: **Vergisst du es, sind die Daten weg.**
@@ -97,7 +107,7 @@ Lieber im Terminal? `sudo kairo-install` stellt dieselben Fragen ohne Fenster.
 ## 5. Erster Start
 
 - Im Anmeldebildschirm mit deinem Benutzer anmelden.
-- Ein paar Minuten warten, bis ChatGPT Desktop, Roblox (Sober), Spotify und VS Code im App-Menü sind.
+- Ein paar Minuten warten, bis Roblox (Sober), Spotify und VS Code im App-Menü sind.
 - KI im Terminal: Terminal öffnen, `claude` (Anthropic) oder `codex` (OpenAI)
   eintippen. Beim ersten Aufruf meldest du dich mit deinem Konto an.
 - Steam starten, anmelden. Für Windows-Spiele: Steam → Einstellungen →
@@ -107,6 +117,12 @@ Lieber im Terminal? `sudo kairo-install` stellt dieselben Fragen ohne Fenster.
   - `MANGOHUD=1 %command%` zeigt FPS, CPU- und GPU-Last an
 
 ## 6. Updates und Zurückrollen
+
+Die installierte Firewall blockiert unaufgeforderte eingehende Verbindungen
+für IPv4 und IPv6. Surfen, Downloads, Steam als Client und Discord können
+ausgehende Verbindungen herstellen. Für eigene Spielserver oder andere
+gehostete Dienste sind gezielte Regeln in `/etc/nftables.conf` erforderlich.
+Die Firewall nicht pauschal abschalten.
 
 - **Kairo Update** (im App-Menü) zeigt, wie viele Updates da sind, und
   installiert System und Apps mit einem Klick. Einmal am Tag meldet sich

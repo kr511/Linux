@@ -11,6 +11,7 @@ fastfetch
 
 # Versionsverwaltung, um im Live-System direkt dieses Repo klonen zu können.
 git
+python
 
 # Firmware einzeln statt "linux-firmware" (siehe packages.remove.x86_64):
 # alles außer NVIDIA und Marvell

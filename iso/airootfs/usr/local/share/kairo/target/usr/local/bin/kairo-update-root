@@ -7,7 +7,15 @@ set -euo pipefail
 
 (( EUID == 0 )) || { echo "Bitte über kairo-update starten." >&2; exit 1; }
 
-kernel_before="$(pacman -Q linux-zen 2>/dev/null || true)"
+kernel_versions() { pacman -Q linux-zen linux-kairo 2>/dev/null || true; }
+kernel_before="$(kernel_versions)"
+mark_kernel_change() {
+    if [[ "$(kernel_versions)" != "${kernel_before}" ]]; then
+        touch /run/reboot-required-kairo
+    fi
+}
+# Auch nach einem späteren Flatpak-Fehler bleibt der Neustarthinweis erhalten.
+trap mark_kernel_change EXIT
 
 echo "@@PROGRESS 5"
 echo "==> Systemupdate (Snapshot wird automatisch angelegt)"
@@ -21,8 +29,5 @@ echo "@@PROGRESS 90"
 echo "==> Claude Code"
 /usr/local/bin/kairo-claude-code || echo "Claude Code konnte nicht aktualisiert werden" >&2
 
-if [[ "$(pacman -Q linux-zen 2>/dev/null || true)" != "${kernel_before}" ]]; then
-    touch /run/reboot-required-kairo
-fi
 echo "@@PROGRESS 100"
 echo "==> Fertig"

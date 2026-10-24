@@ -1,39 +1,75 @@
 #!/usr/bin/env bash
-# Installiert die native ChatGPT-App über den geprüften offiziellen
-# Arch-Installer. Quelle: https://learn.chatgpt.com/docs/linux/linux-app
-# Stand 2026-10-24: Installer richtet das signierte OpenAI-pacman-Repo ein,
-# prüft Schlüssel und Signaturen und führt ein vollständiges Systemupdate aus.
-# Bei Änderungen am Upstream-Installer: erst prüfen, dann SHA-256 aktualisieren.
+# Installiert die native ChatGPT-App aus OpenAIs signiertem pacman-Repository.
+# Quelle: https://learn.chatgpt.com/docs/linux/linux-app
+#
+# OpenAIs install-arch.sh wird bewusst NICHT ausgeführt: Es enthält die Liste
+# der aktuellen Versionen und ändert sich mit jedem Release. Eine feste
+# Prüfsumme dafür würde nach wenigen Tagen jede Installation blockieren.
+# Festgehalten wird stattdessen OpenAIs Signaturschlüssel (Datei daneben,
+# byte-gleich mit .../codex-app-prod/linux/repository-signing-key.gpg).
+# Das Repository wird genau so eingerichtet wie vom offiziellen Installer,
+# pacman prüft Datenbank und Paket gegen diesen Schlüssel. Nach der
+# Installation pflegt das Paket Schlüssel und Repository selbst.
+#
+# Aufrufer: kairo-install (im chroot), kairo-firstboot, von Hand mit
+# "sudo kairo-chatgpt-install". Mehrfach aufrufen schadet nicht.
 
 set -euo pipefail
 
+key_file=/usr/local/share/kairo/openai-chatgpt.gpg
+key_fingerprint=3BFA0E4AE8B8CC16A2D9BA684A3B4A566C4660E4
+repo_conf=/etc/pacman.d/openai-chatgpt.conf
+pacman_conf=/etc/pacman.conf
+web_starter=/usr/local/share/applications/kairo-chatgpt.desktop
+
 [[ "$(id -u)" == 0 ]] || { echo "Bitte als root starten." >&2; exit 1; }
 
-if pacman -Q chatgpt-bin >/dev/null 2>&1 && command -v chatgpt >/dev/null 2>&1; then
-    echo "==> Native ChatGPT-App ist bereits installiert"
-    exit 0
+installed() { pacman -Q chatgpt-bin >/dev/null 2>&1 && command -v chatgpt >/dev/null 2>&1; }
+
+if ! installed; then
+    echo "==> Native ChatGPT-App: OpenAI-Repository einrichten"
+    # Ganze Schlüsseldatei prüfen, bevor pacman ihr vertraut: genau ein
+    # Hauptschlüssel, und zwar der festgehaltene
+    gnupg_home="$(mktemp -d)"
+    cleanup() {
+        rm -rf -- "${gnupg_home}"
+        # pacman-key lässt gpg-agent laufen. Im chroot von kairo-install hielte
+        # er die neue Festplatte fest, sie ließe sich am Ende nicht aushängen.
+        gpgconf --homedir /etc/pacman.d/gnupg --kill gpg-agent 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    fingerprints="$(gpg --homedir "${gnupg_home}" --batch --show-keys --with-colons "${key_file}" |
+        awk -F: '$1 == "pub" { primary = 1 } $1 == "sub" { primary = 0 }
+                 $1 == "fpr" && primary { print $10; primary = 0 }')"
+    if [[ "${fingerprints}" != "${key_fingerprint}" ]]; then
+        echo "OpenAI-Schlüssel ${key_file} hat nicht den erwarteten Fingerprint, Abbruch." >&2
+        exit 1
+    fi
+    pacman-key --init
+    pacman-key --add "${key_file}"
+    pacman-key --lsign-key "${key_fingerprint}"
+
+    # Gleicher Inhalt wie bei OpenAIs Installer und Paket: Beide erkennen die
+    # Datei dann als ihre eigene und pflegen sie weiter
+    if [[ ! -e "${repo_conf}" ]]; then
+        install -m 0644 /dev/stdin "${repo_conf}" <<'EOF'
+### THIS FILE IS AUTOMATICALLY CONFIGURED ###
+# Remove it and its Include line to opt out of automatic package updates.
+[openai-chatgpt]
+SigLevel = Required DatabaseRequired TrustedOnly
+Server = https://persistent.oaistatic.com/codex-app-prod/linux/arch/$arch
+EOF
+    fi
+    include_line="Include = ${repo_conf}"
+    grep -qxF "${include_line}" "${pacman_conf}" || printf '\n%s\n' "${include_line}" >> "${pacman_conf}"
+
+    echo "==> Native ChatGPT-App installieren"
+    # -Syu statt -S: Arch unterstützt keine Teil-Updates. --noconfirm lehnt
+    # Rückfragen wie "Paket X entfernen?" ab, statt sie still zu bestätigen.
+    pacman -Syu --needed --noconfirm chatgpt-bin
+    installed || { echo "ChatGPT ist nach pacman nicht installiert." >&2; exit 1; }
 fi
 
-installer_url=https://persistent.oaistatic.com/codex-app-prod/linux/install-arch.sh
-installer_sha256=a21f493780ad124547a3fb64524cc7909370caf1ecea08a143e1f6c271775ccb
-
-umask 077
-work_dir="$(mktemp -d)"
-trap 'rm -rf -- "${work_dir}"' EXIT
-installer="${work_dir}/install-arch.sh"
-
-echo "==> Native ChatGPT-App: offiziellen Installer laden und prüfen"
-curl --proto '=https' --tlsv1.2 --fail --location --connect-timeout 15 \
-    --max-time 120 --retry 3 --output "${installer}" "${installer_url}"
-if ! printf '%s  %s\n' "${installer_sha256}" "${installer}" | sha256sum --check --status; then
-    echo "ChatGPT-Installer hat sich geändert. Keine Ausführung; neue Version muss erst geprüft werden." >&2
-    exit 1
-fi
-
-# Der offizielle Installer bietet keine unbeaufsichtigte Option an.
-# Prozesssubstitution liefert die pacman-Bestätigungen, ohne einen SIGPIPE
-# von yes als fehlgeschlagene Installation zu werten. Fehler des Installers
-# bleiben durch set -e erhalten. Es wird nur die oben geprüfte Datei ausgeführt.
-bash "${installer}" < <(yes)
-pacman -Q chatgpt-bin
-command -v chatgpt >/dev/null
+# Der Web-Starter ist nur Ersatz, solange die native App fehlt
+rm -f -- "${web_starter}"
+echo "==> Native ChatGPT-App ist installiert ($(pacman -Q chatgpt-bin))"
