@@ -20,7 +20,8 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | Installiertes System startet, erster Start lädt alle Apps | ✅ | dito |
 | Snapshots und Zurückrollen (`kairo-rollback`) | ✅ | dito, inkl. Neustart nach dem Zurückrollen |
 | Kairo Update (Prüfung, Timer) | ✅ | dito; Update-Fenster selbst nur von Hand testbar |
-| Grafischer Installer (`kairo-install-gui`) | 🟨 | Nur shellcheck; die Fenster kann die CI nicht bedienen |
+| Grafischer Installer (`kairo-install-gui`) | 🟩 | Ablauf mit nachgebauten Fenstern getestet (`tests/test_gui_installer.py`), echte Fenster nur von Hand |
+| Release v1.0 (Download-Seite) | ✅ | https://github.com/kr511/Linux/releases/tag/v1.0, Lauf 40013204531, alle Tests grün |
 | Installation auf deinem echten PC | ⬜ | Erst nach grünem Installationstest |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
