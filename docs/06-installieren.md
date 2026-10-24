@@ -87,9 +87,12 @@ Beim Einschalten des PCs die Setup-Taste drücken (meist `Entf`, `F2` oder `F12`
    Beides ("Hardware prüfen", "Kairo installieren") ist auch im Dock links.
 3. Für WLAN: oben rechts auf das Netzwerk-Symbol klicken. LAN geht von selbst.
 4. Der Installer führt dich durch ein paar Fenster:
-   - Festplatte auswählen (die Liste zeigt Größe und Modell, der USB-Stick fehlt absichtlich)
+   - Festplatte auswählen (die Liste zeigt Größe, Modell und Seriennummer;
+     belegte oder nicht eindeutig identifizierbare Laufwerke fehlen ebenso
+     wie der Live-Stick). Nur die separate leere SSD anschließen.
    - Benutzername und Passwort festlegen
-   - **Verschlüsseln oder nicht.** Mit Verschlüsselung fragt Kairo bei jedem
+   - **Verschlüsseln oder nicht.** Verschlüsselung ist vorausgewählt.
+     Abbrechen beendet die Installation. Mit Verschlüsselung fragt Kairo bei jedem
      Start nach einem eigenen Passwort (mindestens 8 Zeichen, deutsche
      Tastatur). Ohne dieses Passwort kommt niemand an deine Daten, auch du
      nicht: **Vergisst du es, sind die Daten weg.**
@@ -114,6 +117,12 @@ Lieber im Terminal? `sudo kairo-install` stellt dieselben Fragen ohne Fenster.
   - `MANGOHUD=1 %command%` zeigt FPS, CPU- und GPU-Last an
 
 ## 6. Updates und Zurückrollen
+
+Die installierte Firewall blockiert unaufgeforderte eingehende Verbindungen
+für IPv4 und IPv6. Surfen, Downloads, Steam als Client und Discord können
+ausgehende Verbindungen herstellen. Für eigene Spielserver oder andere
+gehostete Dienste sind gezielte Regeln in `/etc/nftables.conf` erforderlich.
+Die Firewall nicht pauschal abschalten.
 
 - **Kairo Update** (im App-Menü) zeigt, wie viele Updates da sind, und
   installiert System und Apps mit einem Klick. Einmal am Tag meldet sich

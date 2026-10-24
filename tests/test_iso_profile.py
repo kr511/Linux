@@ -222,7 +222,7 @@ class AssembledProfileTest(unittest.TestCase):
         self.assertEqual(name, "kairo")
         self.assertRegex(label, r"^KAIRO_\d{6}$")
         self.assertLessEqual(len(label), 32)
-        self.assertRegex(version, r"^1\.0-\d{4}\.\d{2}\.\d{2}$")
+        self.assertRegex(version, r"^1\.0\.1-\d{4}\.\d{2}\.\d{2}$")
         self.assertEqual(app, "Kairo OS Live")
 
     def test_bootmodi_von_releng_geerbt(self):

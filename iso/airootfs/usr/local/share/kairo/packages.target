@@ -5,6 +5,7 @@
 # --- Grundsystem ---------------------------------------------------------------
 base
 base-devel
+python
 # Kernel mit Gaming-/Desktop-Optimierungen (besserer Scheduler, niedrigere
 # Latenz). Der eigene linux-kairo kommt erst nach eigenem Boot-Test.
 linux-zen
@@ -35,6 +36,7 @@ gnome
 gnome-tweaks
 gdm
 networkmanager
+nftables
 bluez
 bluez-utils
 pipewire

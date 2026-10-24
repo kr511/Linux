@@ -36,7 +36,11 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: validate
     name: ISO bauen (Arch-Container)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -136,7 +140,7 @@ jobs:
         run: |
           for try in 1 2 3; do
             timeout 300 sudo apt-get update -qq \
-              && timeout 600 sudo apt-get install -y -qq qemu-system-x86 ovmf && exit 0
+              && timeout 600 sudo apt-get install -y -qq qemu-system-x86 ovmf tesseract-ocr tesseract-ocr-deu && exit 0
             echo "apt-get fehlgeschlagen (Versuch ${try}), nochmal"
             sleep 20
           done
@@ -180,7 +184,7 @@ jobs:
   # Läuft nur bei einem Versions-Tag und nur, wenn ALLE Tests bestanden sind.
   release:
     name: Release veröffentlichen
-    needs: [build, boot-test]
+    needs: [validate, build, boot-test]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:

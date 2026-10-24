@@ -40,15 +40,19 @@ if (( ${#disks[@]} == 0 )); then
 fi
 rows=()
 for d in "${disks[@]}"; do
-    IFS=$'\t' read -r dev size model <<<"${d}"
-    rows+=(FALSE "${dev}" "${size} GiB" "${model:-unbekannt}")
+    IFS=$'\t' read -r dev size model serial identity <<<"${d}"
+    rows+=(FALSE "${dev}" "${size} GiB" "${model:-unbekannt}" "${serial}" "${identity}")
 done
 rows[0]=TRUE
 disk="$(zenity --list --radiolist --title="${title}" --width=620 --height=360 \
     --text="Auf welche Festplatte soll Kairo? <b>Sie wird komplett gelöscht.</b>\n(Der USB-Stick, von dem Kairo läuft, steht nicht in der Liste.)" \
     --column="" --column="Gerät" --column="Größe" --column="Modell" \
+    --column="Seriennummer" --column="Identität" --hide-column=6 \
     --print-column=2 --ok-label="Weiter" "${rows[@]}")" || exit 0
 [[ -n "${disk}" ]] || exit 0
+IFS=$'\t' read -r _ _ model serial identity \
+    < <(printf '%s\n' "${disks[@]}" | awk -F '\t' -v d="${disk}" '$1 == d')
+[[ -n "${identity}" ]] || { error "Laufwerk nicht eindeutig identifizierbar."; exit 1; }
 
 # --- Benutzer ---------------------------------------------------------------------
 
@@ -77,20 +81,23 @@ password="$(ask_password "Passwort für <b>${user}</b> (Anmelden und Administrat
 
 # --- Verschlüsselung -----------------------------------------------------------------
 
-encrypt=""
+encrypt=0
 crypt_password=""
-if zenity --question --title="${title}" --width="${w}" \
-    --ok-label="Verschlüsseln" --cancel-label="Nicht verschlüsseln" \
-    --text="<b>Festplatte verschlüsseln?</b>\n\nDann fragt Kairo bei jedem Start nach einem Passwort. Wird der PC gestohlen, kommt niemand an deine Daten.\n\n<b>Vergisst du das Passwort, sind alle Daten weg.</b>"; then
+crypt_choice="$(zenity --list --radiolist --title="${title}" --width=520 --height=300 \
+    --text="Festplatte verschlüsseln? Beim Start wird ein Passwort benötigt. Ohne dieses Passwort sind die Daten nicht wiederherstellbar." \
+    --column="" --column="Auswahl" --ok-label="Weiter" --cancel-label="Abbrechen" \
+    TRUE "Verschlüsseln" FALSE "Nicht verschlüsseln")" || exit 0
+if [[ "${crypt_choice}" == Verschlüsseln ]]; then
     encrypt=1
     crypt_password="$(ask_password "Passwort für die Verschlüsselung (mindestens 8 Zeichen). Wird bei jedem Start abgefragt:" 8)" || exit 0
+elif [[ "${crypt_choice}" != "Nicht verschlüsseln" ]]; then
+    exit 0
 fi
 
 # --- Bestätigung --------------------------------------------------------------------
 
-model="$(lsblk -dno MODEL "${disk}" 2>/dev/null)"
 answer="$(zenity --entry --title="${title}" --width=520 --ok-label="Installieren" \
-    --text="<b>Zusammenfassung</b>\n\nFestplatte: <b>${disk}</b> ${model}\nBenutzer: ${user}\nVerschlüsselung: $([[ -n "${encrypt}" ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\n<span foreground=\"#e5534b\"><b>ALLE DATEN AUF ${disk} WERDEN GELÖSCHT.</b></span>\n\nZum Fortfahren <b>LÖSCHEN</b> eintippen:")" || exit 0
+    --text="<b>Zusammenfassung</b>\n\nFestplatte: <b>${disk}</b> ${model}\nSeriennummer: ${serial}\nBenutzer: ${user}\nVerschlüsselung: $([[ "${encrypt}" == 1 ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\n<span foreground=\"#e5534b\"><b>ALLE DATEN AUF ${disk} WERDEN GELÖSCHT.</b></span>\n\nZum Fortfahren <b>LÖSCHEN</b> eintippen:")" || exit 0
 if [[ "${answer}" != "LÖSCHEN" && "${answer}" != "LOESCHEN" ]]; then
     zenity --info --title="${title}" --width="${w}" --text="Abgebrochen, nichts wurde verändert."
     exit 0
@@ -101,8 +108,8 @@ fi
 runtime="${XDG_RUNTIME_DIR:-/tmp}"
 pw_file="$(mktemp -p "${runtime}" kairo-pw.XXXXXX)"
 printf '%s' "${password}" > "${pw_file}"
-env_args=(KAIRO_DISK="${disk}" KAIRO_USER="${user}" KAIRO_YES=1 KAIRO_PASSWORD_FILE="${pw_file}")
-if [[ -n "${encrypt}" ]]; then
+env_args=(KAIRO_DISK="${disk}" KAIRO_DISK_ID="${identity}" KAIRO_USER="${user}" KAIRO_YES=1 KAIRO_PASSWORD_FILE="${pw_file}" KAIRO_ENCRYPT="${encrypt}")
+if [[ "${encrypt}" == 1 ]]; then
     crypt_file="$(mktemp -p "${runtime}" kairo-crypt.XXXXXX)"
     printf '%s' "${crypt_password}" > "${crypt_file}"
     env_args+=(KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD_FILE="${crypt_file}")
@@ -122,7 +129,7 @@ if (( status == 0 )); then
     # "Später" ist kein Fehler: Rückgabewert der Frage ignorieren
     zenity --question --title="${title}" --icon="${icon}" --width="${w}" \
         --ok-label="Jetzt neu starten" --cancel-label="Später" \
-        --text="<big><b>Kairo ist installiert.</b></big>\n\nZiehe nach dem Herunterfahren den USB-Stick ab.$([[ -n "${encrypt}" ]] && printf '\\nBeim Start fragt Kairo nach dem Verschlüsselungs-Passwort.')\n\nBeim ersten Start lädt Kairo im Hintergrund Roblox, Spotify, VS Code und Claude Code nach." \
+        --text="<big><b>Kairo ist installiert.</b></big>\n\nZiehe nach dem Herunterfahren den USB-Stick ab.$([[ "${encrypt}" == 1 ]] && printf '\\nBeim Start fragt Kairo nach dem Verschlüsselungs-Passwort.')\n\nBeim ersten Start lädt Kairo im Hintergrund Roblox, Spotify, VS Code und Claude Code nach." \
         && systemctl reboot
     exit 0
 else

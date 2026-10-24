@@ -18,7 +18,7 @@ iso_publisher="Kairo OS <https://github.com/kr511/Linux>"
 iso_application="Kairo OS Live"
 
 # Projektversion plus Build-Datum, z. B. 1.0-2026.10.23
-iso_version="1.0-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
+iso_version="1.0.1-$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 
 # install_dir bleibt absichtlich "arch" (Standard von releng). Der Ordnername
 # ist für Nutzer unsichtbar; ihn zu ändern bringt in 0.1 nur Risiko.

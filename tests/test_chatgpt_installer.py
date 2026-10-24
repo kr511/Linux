@@ -6,6 +6,7 @@ never via runtime environment variables.
 """
 
 import os
+import base64
 from pathlib import Path
 import re
 import shutil
@@ -130,14 +131,15 @@ class ChatGPTInstallerTest(unittest.TestCase):
         self.assertIn("-Syu", log)
 
     def test_foreign_key_is_never_trusted(self):
-        home = self.dir / "gnupg"
-        home.mkdir(mode=0o700)
-        gpg = ["gpg", "--homedir", str(home), "--batch", "--passphrase", ""]
-        subprocess.run(gpg + ["--quick-gen-key", "Fremd <fremd@example.invalid>",
-                              "ed25519", "sign", "never"], check=True, capture_output=True)
-        self.key.write_bytes(subprocess.run(gpg + ["--export"], check=True,
-                                            capture_output=True).stdout)
-        subprocess.run(["gpgconf", "--homedir", str(home), "--kill", "all"], capture_output=True)
+        # Debian 12 public release key, a real foreign key. No private key or
+        # socket/agent is needed to test rejection by fingerprint.
+        self.key.write_bytes(base64.b64decode(
+            "mDMEY865UxYJKwYBBAHaRw8BAQdAd7Z0srwuhlB6JKFkcf4HU4SSS/xcRfwEQWzrcrf6AEq0"
+            "SURlYmlhbiBTdGFibGUgUmVsZWFzZSBLZXkgKDEyL2Jvb2t3b3JtKSA8ZGViaWFuLXJlbGVh"
+            "c2VAbGlzdHMuZGViaWFuLm9yZz6IlgQTFggAPhYhBE1k/sEZwgKQZ9bnkfjSWFuHg9SBBQJj"
+            "zrlTAhsDBQkPCZwABQsJCAcCBhUKCQgLAgQWAgMBAh4BAheAAAoJEPjSWFuHg9SBSgwBAP9q"
+            "peO5z1s5m4D4z3TcqDo1wez6DNya27QWWoG/4oBsAQCEN8Z00DXagPHbwrvsY2t9BCsT+Pgn"
+            "Sn9biobwX7bDDg=="))
         result, log = self.run_helper()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Fingerprint", result.stderr)

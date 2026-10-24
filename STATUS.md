@@ -32,6 +32,26 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 
 ## Testprotokoll
 
+### 2026-10-24: SSD-Schutz, Firewall und echter Entsperrtest vorbereitet
+
+- Arbeitsbranch `kairo-ssd-kernel`, Ziel v1.0.1 mit `linux-zen` als Standard.
+  Der dreistufige Plan steht in `docs/plan-ssd-und-linux-kairo.md`.
+- Laufwerksidentität und Belegung vor dem Löschen prüfen; GUI zeigt
+  Seriennummer und reicht die gewählte Identität weiter. Verschlüsselung ist
+  vorausgewählt, Abbrechen bleibt ein Abbruch. Kein globales `swapoff -a`.
+- Persistente nftables-Firewall für IPv4/IPv6 vorbereitet. Der VM-Prüfclient
+  läuft in einem eigenen Netzwerk-Namespace und enthält eine positive
+  Kontrollmessung. Ausgehendes HTTPS wird ebenfalls geprüft.
+- VM-Testschlüssel im Initramfs entfernt; der Test sucht den sichtbaren
+  Passwortdialog per OCR und tippt ein falsches sowie das richtige
+  Testpasswort über QMP mit deutscher Tastaturbelegung ein.
+- Lokal: shellcheck und 60 unittest-Fälle durchgelaufen, davon 58 bestanden
+  und 2 mangels Kernelquellen übersprungen. Echte archiso-v91-Profiltests
+  eingeschlossen. Fremdschlüsseltest verwendet einen festen öffentlichen
+  Debian-Schlüssel, damit kein GPG-Agent für Schlüsselerzeugung nötig ist.
+- Noch nicht nachgewiesen: neue ISO, neue Firewall-/Entsperrprüfungen in QEMU
+  und echte Hardware. Keine Freigabe allein aufgrund dieser lokalen Tests.
+
 ### 2026-10-24: ChatGPT-Installation repariert und umgebaut
 
 - ISO-Test von PR #11 (Lauf 40068021246): ISO, UEFI, BIOS grün; install und

@@ -37,6 +37,8 @@ share=/usr/local/share/kairo
 mnt=/mnt
 min_gib=32
 crypt_name=kairo-root
+disk_guard=/usr/local/lib/kairo/disk_guard.py
+mounted="" opened_crypt=""
 # Btrfs: zstd-Kompression spart Platz und schont die SSD
 btrfs_opts=noatime,compress=zstd:1
 
@@ -59,23 +61,11 @@ read_secret_file() {
 
 # Festplatten, auf die installiert werden darf: keine CDs, kein zram/loop,
 # und nie der USB-Stick, von dem Kairo gerade läuft
-list_disks() {
-    local live_dev live_disk=""
-    live_dev="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
-    if [[ -n "${live_dev}" ]]; then
-        live_disk="/dev/$(lsblk -no PKNAME "${live_dev}" 2>/dev/null | head -1)"
-        [[ "${live_disk}" == /dev/ ]] && live_disk="${live_dev}"
-    fi
-    lsblk -dpno NAME,TYPE | awk '$2 == "disk" {print $1}' \
-        | grep -v -e '^/dev/zram' -e '^/dev/loop' | grep -vxF "${live_disk:-none}" || true
-}
+list_disks() { python3 "${disk_guard}" list; }
 
 if [[ "${1:-}" == --list-disks ]]; then
-    # Tab-getrennt: Gerät, Größe in GiB, Modell (für kairo-install-gui)
-    while read -r d; do
-        printf '%s\t%s\t%s\n' "${d}" "$(( $(lsblk -dbno SIZE "${d}") / 1024 / 1024 / 1024 ))" \
-            "$(lsblk -dno MODEL "${d}" | sed 's/[[:space:]]*$//')"
-    done < <(list_disks)
+    # Gerät, GiB, Modell, Seriennummer/WWN, Identitäts-Hash.
+    list_disks
     exit 0
 fi
 
@@ -83,8 +73,8 @@ fi
 on_error() {
     printf '\n%sDie Installation ist fehlgeschlagen.%s Die Meldung steht oben.\n' "${red}" "${off}" >&2
     printf 'Protokoll: /tmp/kairo-install.log\n' >&2
-    umount -R "${mnt}" 2>/dev/null || true
-    cryptsetup close "${crypt_name}" 2>/dev/null || true
+    if [[ -n "${mounted}" ]]; then umount -R "${mnt}" 2>/dev/null || true; fi
+    if [[ -n "${opened_crypt}" ]]; then cryptsetup close "${crypt_name}" 2>/dev/null || true; fi
     if [[ -n "${KAIRO_SELFTEST:-}" ]]; then echo KAIRO_INSTALL_FAILED > /dev/ttyS0; fi
 }
 trap on_error ERR
@@ -113,7 +103,8 @@ echo "Internet ok"
 
 # --- 2. Festplatte wählen --------------------------------------------------------
 
-mapfile -t disks < <(list_disks)
+disk_rows="$(list_disks)" || die "Laufwerksprüfung fehlgeschlagen."
+mapfile -t disks < <(printf '%s\n' "${disk_rows}" | cut -f1 | sed '/^$/d')
 (( ${#disks[@]} )) || die "Keine Festplatte gefunden."
 
 if [[ -n "${KAIRO_DISK:-}" ]]; then
@@ -122,7 +113,7 @@ if [[ -n "${KAIRO_DISK:-}" ]]; then
 else
     info "Welche Festplatte soll Kairo bekommen? ALLES darauf wird gelöscht."
     for i in "${!disks[@]}"; do
-        printf '  %d) %s\n' "$((i + 1))" "$(lsblk -dno NAME,SIZE,MODEL "${disks[$i]}" | sed 's/  */ /g')"
+        printf '  %d) %s\n' "$((i + 1))" "$(printf '%s\n' "${disk_rows}" | awk -F '\t' -v d="${disks[$i]}" '$1 == d {print $1, $2 " GiB", $3, "Seriennummer: " $4}')"
         lsblk -no NAME,SIZE,FSTYPE,LABEL "${disks[$i]}" | tail -n +2 | sed 's/^/        /'
     done
     while true; do
@@ -132,6 +123,10 @@ else
     done
     disk="${disks[$((n - 1))]}"
 fi
+IFS=$'\t' read -r _ size_gib disk_model disk_serial listed_identity \
+    < <(printf '%s\n' "${disk_rows}" | awk -F '\t' -v d="${disk}" '$1 == d')
+disk_identity="${KAIRO_DISK_ID:-${listed_identity}}"
+python3 "${disk_guard}" verify "${disk}" "${disk_identity}" || die "Laufwerk wurde verändert oder ist belegt."
 
 size_gib=$(( $(lsblk -dbno SIZE "${disk}") / 1024 / 1024 / 1024 ))
 (( size_gib >= min_gib )) || die "${disk} hat nur ${size_gib} GiB, Kairo braucht mindestens ${min_gib} GiB."
@@ -173,13 +168,22 @@ fi
 [[ -n "${password}" ]] || die "Leeres Passwort."
 
 encrypt="${KAIRO_ENCRYPT:-}"
-if [[ -z "${KAIRO_YES:-}" && -z "${encrypt}" ]]; then
+if [[ -z "${encrypt}" && -n "${KAIRO_YES:-}" ]]; then
+    die "Automatische Installation braucht KAIRO_ENCRYPT=1 oder ausdrücklich KAIRO_ENCRYPT=0."
+fi
+if [[ -z "${encrypt}" ]]; then
     info "Verschlüsselung"
     printf 'Mit Verschlüsselung fragt Kairo beim Start nach einem Passwort. Wird der\n'
     printf 'PC gestohlen, kommt niemand an deine Daten. Vergisst du es, sind sie weg.\n'
-    read -rp "Festplatte verschlüsseln? [j/N] " answer
-    [[ "${answer,,}" == j* ]] && encrypt=1
+    read -rp "Festplatte verschlüsseln? [J/n] " answer
+    case "${answer,,}" in
+        ""|j|ja) encrypt=1 ;;
+        n|nein) encrypt=0 ;;
+        *) die "Abgebrochen, keine eindeutige Auswahl." ;;
+    esac
 fi
+[[ "${encrypt}" == 0 || "${encrypt}" == 1 ]] || die "Verschlüsselung muss 0 oder 1 sein."
+[[ "${encrypt}" == 0 ]] && encrypt=""
 crypt_password=""
 if [[ -n "${encrypt}" ]]; then
     if [[ -n "${KAIRO_CRYPT_PASSWORD_FILE:-}" ]]; then
@@ -195,7 +199,8 @@ fi
 # --- 4. Letzte Bestätigung --------------------------------------------------------
 
 info "Zusammenfassung"
-printf '  Festplatte:      %s (%s GiB) %s\n' "${disk}" "${size_gib}" "$(lsblk -dno MODEL "${disk}")"
+printf '  Festplatte:      %s (%s GiB) %s\n' "${disk}" "${size_gib}" "${disk_model}"
+printf '  Seriennummer:    %s\n' "${disk_serial}"
 printf '  Benutzer:        %s (Administrator, sudo)\n' "${user}"
 printf '  Verschlüsselung: %s\n' "$([[ -n "${encrypt}" ]] && echo "ja (Passwort beim Start)" || echo nein)"
 printf '  Snapshots:       ja, vor jedem Update automatisch\n'
@@ -210,9 +215,11 @@ fi
 
 info "Partitioniere ${disk}"
 progress 5
-umount -R "${mnt}" 2>/dev/null || true
-cryptsetup close "${crypt_name}" 2>/dev/null || true
-swapoff -a 2>/dev/null || true
+mountpoint -q "${mnt}" && die "${mnt} ist bereits eingehängt. Bitte erst prüfen."
+[[ ! -e "/dev/mapper/${crypt_name}" ]] || die "${crypt_name} ist bereits in Benutzung."
+# Letzte Prüfung direkt vor dem ersten destruktiven Befehl. Niemals belegte
+# Laufwerke automatisch aushängen, nur um diese Prüfung zu umgehen.
+python3 "${disk_guard}" verify "${disk}" "${disk_identity}" || die "Laufwerk fehlt, ist belegt oder wurde ausgetauscht."
 wipefs --all --force "${disk}"
 sgdisk --zap-all "${disk}"
 # 8309 = Linux LUKS, 8304 = Linux-Root (x86-64)
@@ -233,6 +240,7 @@ if [[ -n "${encrypt}" ]]; then
         | cryptsetup luksFormat --type luks2 --batch-mode --label KairoCrypt --key-file=- "${root_part}"
     printf '%s' "${crypt_password}" \
         | cryptsetup open --key-file=- "${root_part}" "${crypt_name}"
+    opened_crypt=1
     root_dev="/dev/mapper/${crypt_name}"
 else
     root_dev="${root_part}"
@@ -241,6 +249,7 @@ fi
 info "Lege Btrfs mit Subvolumes an"
 mkfs.btrfs -f -L Kairo "${root_dev}"
 mount "${root_dev}" "${mnt}"
+mounted=1
 for sv in @ @home @snapshots @var_log @pkg; do
     btrfs subvolume create "${mnt}/${sv}"
 done
@@ -312,18 +321,8 @@ install -m 0755 /usr/local/bin/kairo-rollback "${mnt}/usr/local/bin/kairo-rollba
 if [[ -n "${KAIRO_SELFTEST:-}" ]]; then
     install -m 0755 "${share}/selftest/kairo-selftest" "${mnt}/usr/local/bin/kairo-selftest"
     install -m 0644 "${share}/selftest/kairo-selftest.service" "${mnt}/etc/systemd/system/"
-    if [[ -n "${encrypt}" ]]; then
-        # Der Test kann beim Start kein Passwort tippen: zweiter Schlüssel als
-        # Datei im Initramfs. NUR im Test, auf einem echten PC wäre das
-        # Verschlüsseln damit wertlos.
-        install -d -m 0700 "${mnt}/etc/cryptsetup-keys.d"
-        head -c 64 /dev/urandom > "${mnt}/etc/cryptsetup-keys.d/${crypt_name}.key"
-        chmod 0600 "${mnt}/etc/cryptsetup-keys.d/${crypt_name}.key"
-        printf '%s' "${crypt_password}" | cryptsetup luksAddKey --key-file=- \
-            "${root_part}" "${mnt}/etc/cryptsetup-keys.d/${crypt_name}.key"
-        echo "FILES=(/etc/cryptsetup-keys.d/${crypt_name}.key)" \
-            > "${mnt}/etc/mkinitcpio.conf.d/kairo-selftest.conf"
-    fi
+    install -m 0644 "${share}/selftest/firewall-test.py" "${mnt}/usr/local/lib/kairo-firewall-test.py"
+    # Auch der VM-Test entsperrt über den echten Passwortdialog per QMP.
 fi
 
 # Native ChatGPT-App schon jetzt statt erst beim ersten Start: Dann ist sie bei
@@ -396,7 +395,7 @@ sed -e 's/^Name=.*/Name=Kairo/' \
 printf '[Daemon]\nTheme=kairo\nShowDelay=0\n' > /etc/plymouth/plymouthd.conf
 
 # Dienste (systemweit) und Update-Prüfung (für jeden Benutzer)
-systemctl enable gdm NetworkManager bluetooth fstrim.timer paccache.timer \
+systemctl enable gdm NetworkManager bluetooth nftables fstrim.timer paccache.timer \
     systemd-timesyncd snapper-cleanup.timer kairo-firstboot.service
 systemctl --global enable kairo-update-check.timer
 if [[ -n "${KAIRO_SELFTEST}" ]]; then systemctl enable kairo-selftest.service; fi
@@ -409,7 +408,7 @@ mkinitcpio -P
 bootctl install
 cat > /boot/loader/loader.conf <<EOF
 default kairo.conf
-timeout 3
+timeout 5
 console-mode max
 editor no
 EOF

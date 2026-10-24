@@ -39,6 +39,8 @@ fi
     echo "KERNEL=$(uname -r)"
     echo "GDM=$(systemctl is-active gdm)"
     echo "NM=$(systemctl is-active NetworkManager)"
+    echo "FIREWALL=$(systemctl is-active nftables) $(systemctl is-enabled nftables)"
+    python3 /usr/local/lib/kairo-firewall-test.py
     echo "FIRSTBOOT_DONE=$(test -e /var/lib/kairo/firstboot-done && echo ja || echo nein)"
     # | cat: sonst schreibt pacman Steuerzeichen für den Cursor auf das Terminal
     pacman -Q --color never steam discord firefox chromium gnome-shell linux-zen amd-ucode \
