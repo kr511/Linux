@@ -202,7 +202,10 @@ class Vm:
                     "-device", "scsi-cd,bus=scsi0.0,drive=cdrom0",
                     "-drive", f"id=cdrom0,if=none,format=raw,media=cdrom,read-only=on,file={iso}"]
         if disk:
-            cmd += ["-drive", f"file={disk},if=virtio,format=qcow2,serial=KAIRO-VM-SSD"]
+            # Die Seriennummer gehört ans Gerät, nicht ans qcow2-Format: QEMU lehnt
+            # "-drive ...,format=qcow2,serial=..." ab ("does not support the option 'serial'").
+            cmd += ["-drive", f"file={disk},if=none,id=vmdisk,format=qcow2",
+                    "-device", "virtio-blk-pci,drive=vmdisk,serial=KAIRO-VM-SSD"]
         if uefi:
             code, varsf = next(((c, v) for c, v in OVMF_CANDIDATES
                                 if Path(c).is_file() and Path(v).is_file()), (None, None))
