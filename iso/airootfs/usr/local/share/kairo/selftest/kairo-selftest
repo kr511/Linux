@@ -69,6 +69,12 @@ fi
     echo "LOGO: $(find /usr/local/share/kairo/branding/ -maxdepth 1 -type f -printf '%f ')"
     grep -q 'kairo-start --autostart' /etc/xdg/autostart/kairo-start.desktop && echo "AUTOSTART=kairo-start"
     ls -1 /usr/local/share/applications/
+    # Ohne Protokoll lässt sich ein fehlgeschlagener erster Start nicht klären
+    if [[ ! -e /var/lib/kairo/firstboot-done ]]; then
+        echo '===FIRSTBOOT_LOG_BEGIN'
+        journalctl -u kairo-firstboot -b --no-pager -o cat | grep -v '^y$' | tail -n 150
+        echo '===FIRSTBOOT_LOG_END'
+    fi
     echo '===SELFTEST_END'
 } > /dev/ttyS0 2>&1
 
