@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=ChatGPT
-Comment=KI-Assistent von OpenAI (Web-App)
-Exec=chromium --app=https://chatgpt.com --class=kairo-chatgpt
-Icon=kairo-chatgpt
-StartupWMClass=chrome-chatgpt.com__-Default
-Categories=Network;Utility;

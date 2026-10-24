@@ -43,7 +43,11 @@ fi
     # | cat: sonst schreibt pacman Steuerzeichen für den Cursor auf das Terminal
     pacman -Q --color never steam discord firefox chromium gnome-shell linux-zen amd-ucode \
         vulkan-radeon lib32-vulkan-radeon gamemode mangohud zram-generator \
-        snapper snap-pac plymouth openai-codex | cat
+        snapper snap-pac plymouth openai-codex chatgpt-bin | cat
+    echo "CHATGPT=$(command -v chatgpt)"
+    if [[ -x /usr/bin/chatgpt && -r /usr/share/applications/chatgpt.desktop ]]; then
+        echo "CHATGPT_DESKTOP=ok"
+    fi
     echo "FLATPAKS: $(flatpak list --app --columns=application | tr '\n' ' ')"
     echo "CLAUDE=$(command -v claude)"
     echo "CLAUDE_VERSION=$(claude --version 2>&1 | head -1)"

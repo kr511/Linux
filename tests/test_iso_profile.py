@@ -119,7 +119,7 @@ class KairoDesktopTest(unittest.TestCase):
     def test_desktop_eintraege(self):
         files = [*(self.AIROOTFS / "usr/share/applications").glob("*.desktop"),
                  *(self.SHARE / "target/usr/local/share/applications").glob("*.desktop")]
-        self.assertEqual(len(files), 7)
+        self.assertEqual(len(files), 6)
         icon_dirs = [base / "usr/local/share/icons/hicolor/scalable/apps"
                      for base in (self.SHARE / "target", self.AIROOTFS)]
         for f in files:

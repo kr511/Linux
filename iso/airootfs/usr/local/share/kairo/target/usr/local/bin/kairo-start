@@ -54,7 +54,7 @@ EOF
 while true; do
     status_text="Schön, dass du da bist, <b>$(getent passwd "${USER}" | cut -d: -f5 | cut -d, -f1)</b>!"
     if [[ ! -e /var/lib/kairo/firstboot-done ]]; then
-        status_text+="\n\n⏳ Roblox, Spotify, VS Code und Claude Code werden gerade im Hintergrund geladen. Das dauert ein paar Minuten."
+        status_text+="\n\n⏳ ChatGPT Desktop, Roblox, Spotify, VS Code und Claude Code werden gerade im Hintergrund geladen. Das dauert ein paar Minuten."
     fi
 
     rows=()
@@ -64,7 +64,7 @@ while true; do
     have discord && add discord "Discord" "Mit Freunden schreiben und reden"
     have_flatpak com.spotify.Client && add spotify "Spotify" "Musik"
     add claude "Claude" "KI-Assistent von Anthropic (im Terminal: claude)"
-    add chatgpt "ChatGPT" "KI-Assistent von OpenAI (im Terminal: codex)"
+    have chatgpt && add chatgpt "ChatGPT" "Native Desktop-App von OpenAI (im Terminal: codex)"
     add tips "Spiele-Tipps" "Proton, GameMode, FPS-Anzeige, Roblox"
     add design "Hintergrund und Farben" "Kairo nach deinem Geschmack"
     add update "Updates prüfen" "Kairo Update öffnen"
@@ -80,7 +80,7 @@ while true; do
         discord) discord >/dev/null 2>&1 & ;;
         spotify) flatpak run com.spotify.Client >/dev/null 2>&1 & ;;
         claude)  gtk-launch kairo-claude & ;;
-        chatgpt) gtk-launch kairo-chatgpt & ;;
+        chatgpt) gtk-launch chatgpt & ;;
         tips)    tips ;;
         design)  gnome-control-center background >/dev/null 2>&1 & ;;
         update)  /usr/local/bin/kairo-update & ;;

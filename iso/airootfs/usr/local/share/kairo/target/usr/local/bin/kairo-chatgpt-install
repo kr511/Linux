@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Installiert die native ChatGPT-App über den geprüften offiziellen
+# Arch-Installer. Quelle: https://learn.chatgpt.com/docs/linux/linux-app
+# Stand 2026-10-24: Installer richtet das signierte OpenAI-pacman-Repo ein,
+# prüft Schlüssel und Signaturen und führt ein vollständiges Systemupdate aus.
+# Bei Änderungen am Upstream-Installer: erst prüfen, dann SHA-256 aktualisieren.
+
+set -euo pipefail
+
+[[ "$(id -u)" == 0 ]] || { echo "Bitte als root starten." >&2; exit 1; }
+
+if pacman -Q chatgpt-bin >/dev/null 2>&1 && command -v chatgpt >/dev/null 2>&1; then
+    echo "==> Native ChatGPT-App ist bereits installiert"
+    exit 0
+fi
+
+installer_url=https://persistent.oaistatic.com/codex-app-prod/linux/install-arch.sh
+installer_sha256=a21f493780ad124547a3fb64524cc7909370caf1ecea08a143e1f6c271775ccb
+
+umask 077
+work_dir="$(mktemp -d)"
+trap 'rm -rf -- "${work_dir}"' EXIT
+installer="${work_dir}/install-arch.sh"
+
+echo "==> Native ChatGPT-App: offiziellen Installer laden und prüfen"
+curl --proto '=https' --tlsv1.2 --fail --location --connect-timeout 15 \
+    --max-time 120 --retry 3 --output "${installer}" "${installer_url}"
+if ! printf '%s  %s\n' "${installer_sha256}" "${installer}" | sha256sum --check --status; then
+    echo "ChatGPT-Installer hat sich geändert. Keine Ausführung; neue Version muss erst geprüft werden." >&2
+    exit 1
+fi
+
+# Der offizielle Installer bietet keine unbeaufsichtigte Option an.
+# Prozesssubstitution liefert die pacman-Bestätigungen, ohne einen SIGPIPE
+# von yes als fehlgeschlagene Installation zu werten. Fehler des Installers
+# bleiben durch set -e erhalten. Es wird nur die oben geprüfte Datei ausgeführt.
+bash "${installer}" < <(yes)
+pacman -Q chatgpt-bin
+command -v chatgpt >/dev/null

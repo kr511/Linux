@@ -6,7 +6,7 @@ Installer und eigenem Design. Später: eigener Kernel `linux-kairo`.
 
 > **Stand:** Kairo 1.0. GNOME im Kairo-Design mit grafischem Installer,
 > Snapshots und Zurückrollen, optionaler Verschlüsselung und Kairo Update.
-> Dabei: Steam, Roblox (Sober), Discord, Spotify, VS Code, Claude/ChatGPT,
+> Dabei: Steam, Roblox (Sober), Discord, Spotify, VS Code, ChatGPT Desktop (nativ), Claude als Web-App,
 > Claude Code und Codex im Terminal, eingestellt für AMD.
 >
 > **Download:** https://github.com/kr511/Linux/releases/latest ·
@@ -43,4 +43,4 @@ Installer und eigenem Design. Später: eigener Kernel `linux-kairo`.
 - Gebaut und getestet wird nur in einer Arch-Linux-Umgebung (WSL2 oder VM),
   nie direkt auf echten Datenträgern.
 - Keine Skripte aus dem Internet ungeprüft ausführen.
-- Nur offizielle Quellen: archlinux.org, kernel.org, die Arch-Paketquellen.
+- Offizielle Quellen: archlinux.org, kernel.org, die Arch-Paketquellen sowie das signierte OpenAI-Repository für ChatGPT Desktop.

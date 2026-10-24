@@ -2,7 +2,7 @@
 # in den Einstellungen ändern, das hier sind nur die Startwerte.
 
 [org/gnome/shell]
-favorite-apps=['firefox.desktop', 'org.gnome.Nautilus.desktop', 'steam.desktop', 'org.vinegarhq.Sober.desktop', 'discord.desktop', 'com.spotify.Client.desktop', 'com.visualstudio.code.desktop', 'kairo-claude.desktop', 'kairo-chatgpt.desktop', 'org.gnome.Console.desktop']
+favorite-apps=['firefox.desktop', 'org.gnome.Nautilus.desktop', 'steam.desktop', 'org.vinegarhq.Sober.desktop', 'discord.desktop', 'com.spotify.Client.desktop', 'com.visualstudio.code.desktop', 'kairo-claude.desktop', 'chatgpt.desktop', 'org.gnome.Console.desktop']
 
 [org/gnome/desktop/input-sources]
 sources=[('xkb', 'de')]
