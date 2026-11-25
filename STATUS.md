@@ -9,28 +9,55 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 
 | Komponente | Status | Was genau geprüft ist |
 | --- | --- | --- |
-| Statische Tests (`tests/run-all.sh`) | 🟩 | 27 Tests, shellcheck; lokal bestanden |
+| Statische Tests (`tests/run-all.sh`) | 🟩 | shellcheck, 75 Python-Tests (10 ohne Kernelquellen/releng übersprungen); lokal und in CI bestanden |
 | ISO-Profil-Assembly | 🟩 | Gegen echtes releng aus archiso v91 zusammengebaut und geprüft |
 | ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 91, siehe Protokoll |
-| ISO bootet in QEMU (UEFI/BIOS) | ✅ | Automatisch per `scripts/boot-test.py` in GitHub Actions: UEFI 13/13, BIOS 12/12. ping nur per HTTPS ersetzt (siehe Protokoll) |
+| ISO bootet in QEMU (UEFI/BIOS) | ✅ | 1.0.1: UEFI 21/21, BIOS 19/19, Lauf 45696869385 |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
 | GNOME-Live-System (GDM, Autologin, NetworkManager) | 🟩 | `iso.yml` uefi 18/18, bios 17/17 (0.2 und 1.0) |
 | Kairo-Design (Logo, Hintergrund, Bootmenü, Anmeldebildschirm, Boot-Animation) | ✅ | Screenshots im Lauf 39992597552 |
-| `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 44/44 und 44/44, Lauf 39992597552 |
+| `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 1.0.1: 53/53 und 53/53 (echter Passwortdialog, Firewall), Lauf 45696869385 |
 | Installiertes System startet, erster Start lädt alle Apps | ✅ | dito |
-| Native ChatGPT-Desktop-App (Web-Starter nur als Ersatz) | 🟨 | Umgebaut nach rotem VM-Test (siehe Protokoll 2026-10-24); neuer ISO-Test läuft |
+| Native ChatGPT-Desktop-App (Web-Starter nur als Ersatz) | ✅ | Paket, Programm, Desktop-Eintrag, OpenAI-Repo, Web-Starter entfernt: Lauf 45696869385. Anmelden im Fenster nur von Hand |
+| Firewall (nftables, IPv4/IPv6) | ✅ | Dienst aktiv, Fremdzugriff aus eigenem Netz-Namespace blockiert, Kontrollmessung, ausgehend ok: Lauf 45696869385 |
 | Snapshots und Zurückrollen (`kairo-rollback`) | ✅ | dito, inkl. Neustart nach dem Zurückrollen |
 | Kairo Update (Prüfung, Timer) | ✅ | dito; Update-Fenster selbst nur von Hand testbar |
-| Grafischer Installer (`kairo-install-gui`) | 🟩 | Ablauf mit nachgebauten Fenstern getestet (`tests/test_gui_installer.py`), echte Fenster nur von Hand |
+| Grafischer Installer (`kairo-install-gui`) | ✅ | Echte Fenster in der VM: Willkommen → Installieren → alle Schritte per OCR und Mausklick, mit Verschlüsselung, danach voller Installationstest: 57/57, Lauf 45696869385 |
 | Release v1.0 (Download-Seite) | ✅ | https://github.com/kr511/Linux/releases/tag/v1.0, Lauf 40013204531, alle Tests grün |
-| Installation auf deinem echten PC | ⬜ | Erst nach grünem Installationstest |
-| `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut** |
+| Release v1.0.1 | ⬜ | Wird beim Tag `v1.0.1` nur veröffentlicht, wenn der Lauf auf dem Tag grün ist |
+| Installation auf deinem echten PC | ⬜ | Nur von Hand möglich: [`docs/07-test-auf-deinem-pc.md`](docs/07-test-auf-deinem-pc.md) |
+| `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut**, bewusst zurückgestellt (siehe [`FERTIG.md`](FERTIG.md)) |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
 | `scripts/kernel-smoke-test.sh` | 🟩 | Mit Testkernel (defconfig + kairo.config) bestanden, Gegenprobe korrekt |
 | `linux-kairo`-Paket bootet | ⬜ | Das echte Paket (Arch-Basis-Config) wurde noch nie gebaut |
 | `linux-kairo` in der ISO | ⬜ | Erst nach erfolgreichem Einzeltest (Kairo 0.3) |
 
 ## Testprotokoll
+
+### 2026-11-25: Kairo 1.0.1 komplett grün, grafischer Installer echt getestet
+
+- Umgebung: GitHub Actions, QEMU mit KVM, OVMF, archiso 91, Lauf 45696869385
+  (PR #16, Commit 9479da5)
+- Ergebnis: Live UEFI 21/21, Live BIOS 19/19, Installation 53/53,
+  Installation mit Verschlüsselung 53/53, grafische Installation 57/57
+- Vorher rot auf `main` (Lauf 40093372961): nur "Firewall aktiv". Ursache:
+  Archs `nftables.service` (1.1.7) ist oneshot ohne `RemainAfterExit`, der
+  Dienst stand nach dem Laden auf `inactive`, obwohl die Regeln griffen
+  (`FIREWALL_PROBE=ok`). Behoben per Drop-in. Dazu Steam Remote Play,
+  Spiele-Übertragung und mDNS nur aus privaten Netzen freigegeben.
+- Wackelige Prüfungen behoben (Lauf 45679858733): archlinux.org brach TLS ab,
+  jetzt zählt auch der Arch-Mirror bzw. github.com; die OCR des
+  Passwortdialogs akzeptiert abgeschnittene Wörter ("passphr").
+- Neu: `boot-test.py --install --gui` bedient die echten zenity-Fenster mit
+  USB-Tablett (QMP) und tesseract, inkl. Umwandlung heller Schrift in
+  Schwarz auf Weiß. Fotos und OCR-Text jedes Schritts stehen im CI-Protokoll.
+- Gefunden durch den GUI-Test: zenity 4 zeigt bei `--entry`/`--list`/`--forms`
+  Auszeichnungen wie `<b>elias</b>` wörtlich an und schluckt `_`. Texte sind
+  jetzt schlicht.
+- Live-System startet GNOME in der Übersicht; das Willkommensfenster ist dort
+  zu sehen und muss einmal angeklickt werden (in `docs/06` beschrieben).
+- Nicht automatisch prüfbar: echte AMD-Grafik, WLAN, Ton, Standby,
+  Anmelden in den Apps. Siehe `docs/07-test-auf-deinem-pc.md`.
 
 ### 2026-10-24: SSD-Schutz, Firewall und echter Entsperrtest vorbereitet
 

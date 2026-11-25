@@ -9,19 +9,20 @@ Beweise stehen in [`STATUS.md`](STATUS.md) (Lauf-Nummern, Datum, Ergebnis).
 
 ## Checkliste
 
-- [ ] Alle offenen Arbeitsstände in `main`: SSD-Schutz, Firewall, echter
+- [x] Alle offenen Arbeitsstände in `main`: SSD-Schutz, Firewall, echter
       Entsperrtest (PR #12-#15), native ChatGPT-App (PR #11), Firewall-Fix und
       GUI-Test (PR #16). Veraltete PRs geschlossen.
-- [ ] ISO-Workflow auf dem Release-Commit komplett grün:
+- [x] ISO-Workflow komplett grün (Lauf 45696869385, PR #16), auf dem
+      Release-Tag wird er noch einmal vollständig ausgeführt:
       statische Tests, ISO-Build, Live UEFI, Live BIOS, Installation,
       Installation mit Verschlüsselung (echter Passwortdialog),
       **grafischer Installer über die echten Fenster**.
 - [ ] Release `v1.0.1` auf GitHub mit ISO, `SHA256SUMS` und Release-Notizen,
       ISO unter 2 GiB.
-- [ ] `STATUS.md`, `README.md` und die Anleitungen beschreiben 1.0.1.
-- [ ] Testanleitung für echte Hardware:
+- [x] `STATUS.md`, `README.md` und die Anleitungen beschreiben 1.0.1.
+- [x] Testanleitung für echte Hardware:
       [`docs/07-test-auf-deinem-pc.md`](docs/07-test-auf-deinem-pc.md).
-- [ ] Entscheidung zu `linux-kairo` begründet dokumentiert (unten).
+- [x] Entscheidung zu `linux-kairo` begründet dokumentiert (unten).
 
 ## Was nur Eli prüfen kann
 
