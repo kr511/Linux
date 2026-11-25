@@ -62,6 +62,7 @@ CHECK_CMD = (
     "cat /etc/motd; cat /etc/os-release; hostnamectl; bootctl status; "
     "echo HOOKS: $(ls /etc/pacman.d/hooks/); ping -c 3 -w 20 archlinux.org; "
     "curl -sSI -m 30 https://archlinux.org | head -1; "
+    "curl -sSI -m 30 https://geo.mirror.pkgbuild.com | head -1; "
     "echo GDM=$(systemctl is-active gdm); echo NM=$(systemctl is-active NetworkManager); "
     "echo LIVEUSER=$(id -nG kairo); loginctl list-sessions --no-legend; "
     "echo GDM_LOGO=$(DCONF_PROFILE=gdm dconf read /org/gnome/login-screen/logo); "
@@ -411,7 +412,8 @@ def unlock(vm, args, prefix):
         result = subprocess.run(["tesseract", str(path), "stdout", "-l", "eng+deu",
                                  "--psm", "11"], check=True, capture_output=True, text=True)
         seen["text"] = " ".join(result.stdout.split())
-        return re.search(r"passwor|passwör|passphrase|entsperr|unlock", result.stdout, re.I)
+        # OCR schneidet Wörter manchmal ab ("Please enter passphr: isk Kairo")
+        return re.search(r"passw|passph|entsperr|unlock", result.stdout, re.I)
 
     seen = {"text": ""}
     deadline = time.monotonic() + args.boot_timeout
@@ -451,8 +453,9 @@ def evaluate_live(output, boot, powered_off):
         ("hostnamectl: Operating System: Kairo OS", has(output, r"Operating System: Kairo OS")),
         # GitHub-Runner (Azure) lassen kein ICMP nach außen durch, ping bekommt
         # dort nie Antworten. Darum zählt auch eine HTTPS-Antwort von
-        # archlinux.org als "Netzwerk geht".
-        ("Netzwerk: archlinux.org antwortet (ping oder HTTPS)",
+        # archlinux.org oder dem Arch-Mirror als "Netzwerk geht" (archlinux.org
+        # selbst bricht manchmal TLS-Verbindungen ab, Lauf 45679858733).
+        ("Netzwerk: archlinux.org oder Arch-Mirror antwortet (ping oder HTTPS)",
          has(output, r"\b[1-9]\d* received") or has(output, r"^HTTP/\S+ [23]\d\d")),
         ("Desktop: GDM läuft", has(output, r"^GDM=active")),
         ("Desktop: GNOME-Sitzung des Live-Benutzers kairo", has(output, r"^\s*\d+\s+1000\s+kairo\b")),
