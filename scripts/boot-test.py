@@ -36,6 +36,7 @@ Nur Python-Standardbibliothek. Ändert nichts außerhalb von --out.
 """
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -710,11 +711,30 @@ def install_via_gui(vm, args, serial):
             scr.click(r"Sp.ter")
     except GuiError as e:
         log(f"FEHLER im grafischen Installer: {e}")
+        gui_diagnose(vm, args, scr, serial)
     finally:
         vm.qmp.screenshot(args.out / "gui-99-ende.png")
         vm.qmp.keys("ctrl", "alt", "f5")
         time.sleep(3)
     return result, checks()
+
+
+def gui_diagnose(vm, args, scr, serial):
+    """Alles für die Fehlersuche ins CI-Protokoll, auch wenn Artifacts fehlen."""
+    path = args.out / "gui-fehler.png"
+    scr.read(path)
+    log("OCR-Wörter (Text, links, oben, Breite, Höhe): " + repr(scr.words))
+    # Bild als base64 im Protokoll: base64 -d > bild.png
+    print("===PNG_BEGIN " + path.name, flush=True)
+    print(base64.b64encode(path.read_bytes()).decode(), flush=True)
+    print("===PNG_END", flush=True)
+    vm.qmp.keys("ctrl", "alt", "f5")
+    time.sleep(3)
+    vm.qmp.type("{ echo '===GUILOG_BEGIN'; cat /tmp/kairo-install-gui.log; "
+                "ps -eo pid,args | grep -E '[z]enity|[k]airo-install'; "
+                "echo '===GUILOG_END'; } > /dev/ttyS0 2>&1\n")
+    wait_for(serial, "===GUILOG_END", 30)
+    log("Protokoll von kairo-install-gui:\n" + section(serial, "===GUILOG_BEGIN", "===GUILOG_END"))
 
 
 def run_install(args, tmp):

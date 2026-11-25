@@ -15,6 +15,10 @@ w=480
 
 error() { zenity --error --title="${title}" --width="${w}" --text="$1"; }
 
+# Ablauf für Fehlermeldungen festhalten (nie Passwörter): /tmp/kairo-install-gui.log
+trace() { printf '%s %s\n' "$(date +%T)" "$*" >> /tmp/kairo-install-gui.log 2>/dev/null || true; }
+trace "gestartet"
+
 # --- Willkommen ------------------------------------------------------------------
 
 zenity --question --title="${title}" --icon="${icon}" --width="${w}" \
@@ -45,12 +49,18 @@ for d in "${disks[@]}"; do
     rows+=(FALSE "${dev}" "${size} GiB" "${model:-unbekannt}" "${serial}" "${identity}")
 done
 rows[0]=TRUE
+default_disk="${rows[1]}"
 disk="$(zenity --list --radiolist --title="${title}" --width=620 --height=360 \
     --text="Auf welche Festplatte soll Kairo? <b>Sie wird komplett gelöscht.</b>\n(Der USB-Stick, von dem Kairo läuft, steht nicht in der Liste.)" \
     --column="" --column="Gerät" --column="Größe" --column="Modell" \
     --column="Seriennummer" --column="Identität" --hide-column=6 \
-    --print-column=2 --ok-label="Weiter" "${rows[@]}")" || exit 0
-[[ -n "${disk}" ]] || exit 0
+    --print-column=2 --ok-label="Weiter" "${rows[@]}")"
+status=$?
+trace "laufwerk: status=${status} auswahl=${disk:-leer}"
+(( status == 0 )) || exit 0
+# Weiter ohne die Vorauswahl anzufassen: zenity gibt dann nichts aus, gemeint ist
+# aber die sichtbar vorausgewählte erste Zeile (zenity 4 kann dann leer zurückgeben)
+[[ -n "${disk}" ]] || disk="${default_disk}"
 IFS=$'\t' read -r _ _ model serial identity \
     < <(printf '%s\n' "${disks[@]}" | awk -F '\t' -v d="${disk}" '$1 == d')
 [[ -n "${identity}" ]] || { error "Laufwerk nicht eindeutig identifizierbar."; exit 1; }
@@ -87,7 +97,12 @@ crypt_password=""
 crypt_choice="$(zenity --list --radiolist --title="${title}" --width=520 --height=300 \
     --text="Festplatte verschlüsseln? Beim Start wird ein Passwort benötigt. Ohne dieses Passwort sind die Daten nicht wiederherstellbar." \
     --column="" --column="Auswahl" --ok-label="Weiter" --cancel-label="Abbrechen" \
-    TRUE "Verschlüsseln" FALSE "Nicht verschlüsseln")" || exit 0
+    TRUE "Verschlüsseln" FALSE "Nicht verschlüsseln")"
+status=$?
+trace "verschluesselung: status=${status} auswahl=${crypt_choice:-leer}"
+# Abbrechen ist ein Abbruch, nie "unverschlüsselt installieren"
+(( status == 0 )) || exit 0
+[[ -n "${crypt_choice}" ]] || crypt_choice="Verschlüsseln"  # Vorauswahl, siehe oben
 if [[ "${crypt_choice}" == Verschlüsseln ]]; then
     encrypt=1
     crypt_password="$(ask_password "Passwort für die Verschlüsselung (mindestens 8 Zeichen). Wird bei jedem Start abgefragt:" 8)" || exit 0
@@ -127,6 +142,7 @@ sudo env "${env_args[@]}" /usr/local/bin/kairo-install 2>&1 \
     | zenity --progress --title="${title}" --width=520 --no-cancel --auto-close \
         --text="Starte Installation ..."
 status="${PIPESTATUS[0]}"
+trace "kairo-install: status=${status}"
 rm -f -- "${pw_file}" "${crypt_file:-}" 2>/dev/null
 
 if (( status == 0 )); then

@@ -22,8 +22,9 @@ case "$*" in
   *--progress*) cat >/dev/null; exit 0 ;;
   *--list*"Festplatte verschlüsseln"*)
     [[ "$CANCEL_CRYPT" == 1 ]] && exit 1
+    [[ "$EMPTY_LIST" == 1 ]] && exit 0
     if [[ -n "$CRYPT_PW" ]]; then echo "Verschlüsseln"; else echo "Nicht verschlüsseln"; fi ;;
-  *--list*) echo "/dev/vda" ;;
+  *--list*) [[ "$EMPTY_LIST" == 1 ]] || echo "/dev/vda" ;;
   *--forms*Verschlüsselung*) printf '%s\x1f%s\n' "$CRYPT_PW" "$CRYPT_PW" ;;
   *--forms*) printf 'pw1\x1fpw1\n' ;;
   *--entry*LÖSCHEN*) echo "$CONFIRM" ;;
@@ -49,7 +50,7 @@ echo "==> Fertig"; echo "@@PROGRESS 100"
 
 class GuiInstallerTest(unittest.TestCase):
 
-    def run_gui(self, crypt_pw="", confirm="LÖSCHEN", cancel_crypt=False):
+    def run_gui(self, crypt_pw="", confirm="LÖSCHEN", cancel_crypt=False, empty_list=False):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             bindir, runtime = d / "bin", d / "run"
@@ -63,7 +64,7 @@ class GuiInstallerTest(unittest.TestCase):
                 path.chmod(path.stat().st_mode | stat.S_IXUSR)
             env = dict(os.environ, PATH=f"{bindir}:{os.environ['PATH']}", LOG=str(d / "log"),
                        XDG_RUNTIME_DIR=str(runtime), CRYPT_PW=crypt_pw, CONFIRM=confirm,
-                       CANCEL_CRYPT=str(int(cancel_crypt)))
+                       CANCEL_CRYPT=str(int(cancel_crypt)), EMPTY_LIST=str(int(empty_list)))
             result = subprocess.run(["bash", str(GUI)], env=env, capture_output=True, text=True)
             log = (d / "log").read_text() if (d / "log").exists() else ""
             leftovers = list(runtime.iterdir())
@@ -98,6 +99,17 @@ class GuiInstallerTest(unittest.TestCase):
         self.assertIn("KAIRO_ENCRYPT=1", sudo)
         self.assertIn("CRYPT=geheim123", log)
         self.assertNotIn("geheim123", sudo)
+        self.assertEqual(leftovers, [])
+
+    def test_unveraenderte_vorauswahl_gilt(self):
+        # zenity 4 gibt bei "Weiter" ohne Klick auf eine Zeile nichts aus. Dann gilt
+        # die sichtbare Vorauswahl: erste Festplatte und Verschlüsselung
+        code, log, leftovers = self.run_gui(crypt_pw="geheim123", empty_list=True)
+        self.assertEqual(code, 0)
+        sudo = next(l for l in log.splitlines() if l.startswith("SUDO "))
+        self.assertIn("KAIRO_DISK=/dev/vda", sudo)
+        self.assertIn("KAIRO_ENCRYPT=1", sudo)
+        self.assertIn("CRYPT=geheim123", log)
         self.assertEqual(leftovers, [])
 
     def test_ohne_loeschen_wird_nichts_installiert(self):
