@@ -17,8 +17,8 @@ Beweise stehen in [`STATUS.md`](STATUS.md) (Lauf-Nummern, Datum, Ergebnis).
       statische Tests, ISO-Build, Live UEFI, Live BIOS, Installation,
       Installation mit Verschlüsselung (echter Passwortdialog),
       **grafischer Installer über die echten Fenster**.
-- [ ] Release `v1.0.1` auf GitHub mit ISO, `SHA256SUMS` und Release-Notizen,
-      ISO unter 2 GiB.
+- [x] Release `v1.0.1` auf GitHub mit ISO, `SHA256SUMS` und Release-Notizen,
+      ISO unter 2 GiB: https://github.com/kr511/Linux/releases/tag/v1.0.1
 - [x] `STATUS.md`, `README.md` und die Anleitungen beschreiben 1.0.1.
 - [x] Testanleitung für echte Hardware:
       [`docs/07-test-auf-deinem-pc.md`](docs/07-test-auf-deinem-pc.md).
