@@ -113,8 +113,11 @@ env_args=(KAIRO_DISK="${disk}" KAIRO_DISK_ID="${identity}" KAIRO_USER="${user}" 
 if [[ "${encrypt}" == 1 ]]; then
     crypt_file="$(mktemp -p "${runtime}" kairo-crypt.XXXXXX)"
     printf '%s' "${crypt_password}" > "${crypt_file}"
-    env_args+=(KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD_FILE="${crypt_file}")
+    env_args+=(KAIRO_CRYPT_PASSWORD_FILE="${crypt_file}")
 fi
+# Nur der automatische VM-Test (scripts/boot-test.py --gui) legt diese Datei
+# als root an. Dann installiert kairo-install zusätzlich den Selbsttest.
+if [[ -e /run/kairo-selftest ]]; then env_args+=(KAIRO_SELFTEST=1); fi
 unset password crypt_password
 
 # Ausgabe: "# Text" setzt die Beschriftung, Zahlen den Fortschritt

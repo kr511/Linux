@@ -78,6 +78,8 @@ class GuiInstallerTest(unittest.TestCase):
             self.assertIn(part, sudo)
         self.assertIn("KAIRO_ENCRYPT=0", sudo)
         self.assertIn("KAIRO_DISK_ID=identity123", sudo)
+        # Selbsttest nur mit /run/kairo-selftest (legt nur der VM-Test als root an)
+        self.assertNotIn("KAIRO_SELFTEST", sudo)
         self.assertIn("PW=pw1", log)
         # Passwörter nie in der Befehlszeile, Dateien danach gelöscht
         self.assertNotIn("pw1", sudo)

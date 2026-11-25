@@ -110,7 +110,8 @@ jobs:
 
   # uefi/bios: Live-System vom Stick. install(-crypt): kairo-install auf eine
   # virtuelle Festplatte (ohne/mit Verschlüsselung), erster Start davon
-  # (lädt Flatpaks, dauert), dann Zurückrollen auf einen Snapshot
+  # (lädt Flatpaks, dauert), dann Zurückrollen auf einen Snapshot.
+  # install-gui: dasselbe über die echten Fenster des grafischen Installers
   boot-test:
     name: Test ${{ matrix.boot }}
     needs: build
@@ -119,7 +120,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        boot: [uefi, bios, install, install-crypt]
+        boot: [uefi, bios, install, install-crypt, install-gui]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -162,6 +163,9 @@ jobs:
             bios)          flags=(--bios) ;;
             install)       flags=(--install) ;;
             install-crypt) flags=(--install --encrypt) ;;
+            # Wie ein Mensch: Willkommensfenster, kairo-install-gui, Verschlüsselung
+            # (vorausgewählt), Klicks per OCR auf die echten Fenster
+            install-gui)   flags=(--install --gui --encrypt) ;;
           esac
           set +e
           scripts/boot-test.py "${flags[@]}" --out boot-test out/kairo-*-x86_64.iso
