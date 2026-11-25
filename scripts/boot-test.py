@@ -46,6 +46,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 from pathlib import Path
 
 # UEFI-Firmware: Arch (edk2-ovmf) oder Debian/Ubuntu (ovmf)
@@ -306,6 +307,54 @@ def png_size(path):
     return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
 
 
+def png_to_text_pgm(png, pgm, limit=150):
+    """Helle Schrift wird schwarz auf Weiß (PGM), alles andere weiß.
+
+    tesseract liest helle Schrift auf den grauen Fenstern des dunklen
+    GNOME-Designs sonst nicht (Lauf 45691778996: Fenster sichtbar, OCR leer).
+    Nur Standardbibliothek: 8-Bit-RGB/RGBA-PNG ohne Interlacing (QEMU screendump).
+    """
+    data = Path(png).read_bytes()
+    pos, idat = 8, b""
+    while pos < len(data):
+        size = int.from_bytes(data[pos:pos + 4], "big")
+        kind, chunk = data[pos + 4:pos + 8], data[pos + 8:pos + 8 + size]
+        pos += 12 + size
+        if kind == b"IHDR":
+            width, height = int.from_bytes(chunk[0:4], "big"), int.from_bytes(chunk[4:8], "big")
+            bpp = {2: 3, 6: 4}[chunk[9]]
+        elif kind == b"IDAT":
+            idat += chunk
+    raw = zlib.decompress(idat)
+    stride = width * bpp
+    prev = bytearray(stride)
+    out = bytearray()
+    i = 0
+    for _ in range(height):
+        kind = raw[i]
+        line = bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        if kind == 1:
+            for x in range(bpp, stride):
+                line[x] = (line[x] + line[x - bpp]) & 255
+        elif kind == 2:
+            line = bytearray((a + b) & 255 for a, b in zip(line, prev))
+        elif kind == 3:
+            for x in range(stride):
+                left = line[x - bpp] if x >= bpp else 0
+                line[x] = (line[x] + (left + prev[x]) // 2) & 255
+        elif kind == 4:
+            for x in range(stride):
+                a = line[x - bpp] if x >= bpp else 0
+                b, c = prev[x], (prev[x - bpp] if x >= bpp else 0)
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        out += bytes(0 if max(line[x:x + 3]) > limit else 255 for x in range(0, stride, bpp))
+        prev = line
+    Path(pgm).write_bytes(b"P5 %d %d 255\n" % (width, height) + bytes(out))
+
+
 def ocr_words(path):
     """Erkannte Wörter mit Position: [(text, links, oben, breite, höhe), ...]"""
     out = subprocess.run(["tesseract", str(path), "stdout", "-l", "deu+eng", "--psm", "11", "tsv"],
@@ -326,8 +375,12 @@ class Screen:
         self.words, self.size, self.text = [], (1, 1), ""
 
     def read(self, path):
+        """Bildschirm lesen: helle Schrift (Fenster im dunklen Design) und normal."""
         self.vm.qmp.cmd("screendump", filename=str(path), format="png")
-        self.words = ocr_words(path)
+        pgm = path.with_suffix(".pgm")
+        png_to_text_pgm(path, pgm)
+        self.words = ocr_words(pgm) + ocr_words(path)
+        pgm.unlink()
         self.size = png_size(path)
         self.text = " ".join(w[0] for w in self.words)
         return self.text
@@ -339,7 +392,8 @@ class Screen:
         deadline = time.monotonic() + timeout
         while True:
             if re.search(pattern, self.read(path), re.I):
-                log(f"GUI {name}: erkannt ({path.name})")
+                log(f"GUI {name}: erkannt ({path.name}), OCR: {self.text[:400]!r}")
+                log_png(path)
                 return self.text
             if time.monotonic() > deadline:
                 raise GuiError(f"{name}: {pattern!r} nicht am Bildschirm, OCR sah {self.text[:300]!r}")
@@ -375,7 +429,8 @@ class Screen:
                           and p_left - 60 <= w[1] <= b_left + b_width + 60)
         x = (p_left + b_left + b_width) / 2
         # Nicht zu tief: ein Klick auf die Knopfzeile würde das Fenster abschicken
-        for frac in (0.45, 0.3, 0.6, 0.2):
+        # Lauf 45691778996: Text unten 409, Knopftext oben 498, Feld 418-450
+        for frac in (0.3, 0.2, 0.4, 0.5):
             self.click_at(x, text_bottom + (b_top - text_bottom) * frac)
             time.sleep(1)
             self.vm.qmp.keys("ctrl", "a")
@@ -719,15 +774,22 @@ def install_via_gui(vm, args, serial):
     return result, checks()
 
 
+def log_png(path):
+    """Bild als base64 ins CI-Protokoll (Artifacts sind nicht überall abrufbar).
+
+    Zurück: awk '/===PNG_BEGIN name/{f=1;next}/===PNG_END/{f=0}f' log | base64 -d
+    """
+    print(f"===PNG_BEGIN {path.name}", flush=True)
+    print(base64.b64encode(Path(path).read_bytes()).decode(), flush=True)
+    print("===PNG_END", flush=True)
+
+
 def gui_diagnose(vm, args, scr, serial):
     """Alles für die Fehlersuche ins CI-Protokoll, auch wenn Artifacts fehlen."""
     path = args.out / "gui-fehler.png"
     scr.read(path)
     log("OCR-Wörter (Text, links, oben, Breite, Höhe): " + repr(scr.words))
-    # Bild als base64 im Protokoll: base64 -d > bild.png
-    print("===PNG_BEGIN " + path.name, flush=True)
-    print(base64.b64encode(path.read_bytes()).decode(), flush=True)
-    print("===PNG_END", flush=True)
+    log_png(path)
     vm.qmp.keys("ctrl", "alt", "f5")
     time.sleep(3)
     vm.qmp.type("{ echo '===GUILOG_BEGIN'; cat /tmp/kairo-install-gui.log; "
