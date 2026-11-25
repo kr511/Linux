@@ -39,8 +39,9 @@ Installer und eigenem Design.
 3. Baue die ISO: [`docs/02-iso-bauen.md`](docs/02-iso-bauen.md).
 4. Teste sie in QEMU: [`docs/03-iso-in-qemu-testen.md`](docs/03-iso-in-qemu-testen.md).
 5. Die Tests in der Cloud: `.github/workflows/iso.yml` baut die ISO und
-   installiert sie in QEMU (Terminal und grafischer Installer). Ein Tag `vX.Y`
-   veröffentlicht nur, wenn alles grün ist.
+   installiert sie in QEMU (Terminal und grafischer Installer). Veröffentlichen:
+   Tag `vX.Y.Z` pushen oder in Actions "Run workflow" mit `release: vX.Y.Z`;
+   das Release entsteht nur, wenn alles grün ist.
 6. Eigener Kernel (zurückgestellt, siehe [`FERTIG.md`](FERTIG.md)):
    [`docs/04-kernel-bauen.md`](docs/04-kernel-bauen.md).
 

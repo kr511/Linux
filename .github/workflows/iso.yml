@@ -19,9 +19,17 @@
 name: ISO bauen und testen
 
 on:
+  # Version veröffentlichen, zwei Wege (Release nur, wenn alle Tests grün sind):
+  #   1. git tag v1.0.1 && git push origin v1.0.1
+  #   2. Actions -> "ISO bauen und testen" -> Run workflow auf main, bei
+  #      "release" die Version eintragen (z. B. v1.0.1). Der Tag entsteht dann
+  #      erst nach allen grünen Tests, auf genau dem getesteten Commit.
   workflow_dispatch:
-  # Version veröffentlichen: git tag v1.0 && git push origin v1.0
-  # (Release nur, wenn alle Tests grün sind, siehe Job "release")
+    inputs:
+      release:
+        description: 'Version veröffentlichen, z. B. v1.0.1 (leer: nur bauen und testen)'
+        required: false
+        default: ''
   push:
     tags: ['v*']
   pull_request:
@@ -189,7 +197,10 @@ jobs:
   release:
     name: Release veröffentlichen
     needs: [validate, build, boot-test]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release != '' &&
+       github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     permissions:
       contents: write  # nur dieser Job darf ein Release anlegen
@@ -211,9 +222,16 @@ jobs:
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          # Tag-Push: Name des Tags. Run workflow: die eingetragene Version
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release }}
         run: |
+          [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
+            || { echo "Ungültige Version: ${TAG} (erwartet z. B. v1.0.1)"; exit 1; }
+          # Die ISO muss genau diese Version enthalten (Dateiname aus os-release)
+          ls out/kairo-"${TAG#v}"-*-x86_64.iso >/dev/null \
+            || { echo "ISO passt nicht zu ${TAG}:"; ls out; exit 1; }
           notes="docs/releases/${TAG}.md"
           [[ -f "${notes}" ]] || notes=docs/releases/vorlage.md
+          # --target: Ohne vorhandenen Tag legt gh ihn auf dem getesteten Commit an
           gh release create "${TAG}" out/kairo-*-x86_64.iso out/SHA256SUMS \
-            --title "Kairo OS ${TAG#v}" --notes-file "${notes}"
+            --target "${GITHUB_SHA}" --title "Kairo OS ${TAG#v}" --notes-file "${notes}"
