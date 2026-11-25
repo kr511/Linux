@@ -389,8 +389,10 @@ class Screen:
         again = self.find(r"Wiederholen:?")
         _, a_left, a_top, a_width, a_height = again
         # Beschriftung "Passwort" in derselben Spalte direkt über "Wiederholen"
+        # (links- oder rechtsbündige Beschriftungen: eine der Kanten passt)
         labels = [w for w in self.words if re.fullmatch(r"Passwort:?", w[0], re.I)
-                  and abs(w[1] - a_left) < 40 and w[2] < a_top]
+                  and w[2] < a_top and (abs(w[1] - a_left) < 60
+                                        or abs(w[1] + w[3] - a_left - a_width) < 60)]
         if not labels:
             raise GuiError(f"Beschriftung Passwort nicht gefunden, OCR sah {self.text[:300]!r}")
         first = max(labels, key=lambda w: w[2])
