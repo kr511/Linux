@@ -24,7 +24,7 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | Kairo Update (Prüfung, Timer) | ✅ | dito; Update-Fenster selbst nur von Hand testbar |
 | Grafischer Installer (`kairo-install-gui`) | ✅ | Echte Fenster in der VM: Willkommen → Installieren → alle Schritte per OCR und Mausklick, mit Verschlüsselung, danach voller Installationstest: 57/57, Lauf 45696869385 |
 | Release v1.0 (Download-Seite) | ✅ | https://github.com/kr511/Linux/releases/tag/v1.0, Lauf 40013204531, alle Tests grün |
-| Release v1.0.1 | ⬜ | Wird beim Tag `v1.0.1` nur veröffentlicht, wenn der Lauf auf dem Tag grün ist |
+| Release v1.0.1 | ✅ | https://github.com/kr511/Linux/releases/tag/v1.0.1, Lauf 45716751357 auf `main` (ef2b16c): alle Tests inkl. grafischem Installer grün, ISO 1,6 GiB |
 | Installation auf deinem echten PC | ⬜ | Nur von Hand möglich: [`docs/07-test-auf-deinem-pc.md`](docs/07-test-auf-deinem-pc.md) |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut**, bewusst zurückgestellt (siehe [`FERTIG.md`](FERTIG.md)) |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |
@@ -33,6 +33,15 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | `linux-kairo` in der ISO | ⬜ | Erst nach erfolgreichem Einzeltest (Kairo 0.3) |
 
 ## Testprotokoll
+
+### 2026-11-25: Kairo 1.0.1 veröffentlicht
+
+- Release-Lauf 45716751357 (Run workflow mit `release: v1.0.1` auf `main`,
+  Commit ef2b16c): ISO-Build, UEFI, BIOS, install, install-crypt, install-gui
+  grün, danach Tag `v1.0.1` und Download-Seite angelegt.
+- Der GUI-Test war vorher einmal rot (Lauf 45702318120), weil er die
+  Begrüßung auf tty5 für das Willkommensfenster hielt; behoben in 3e6181f,
+  seitdem drei grüne Läufe in Folge.
 
 ### 2026-11-25: Kairo 1.0.1 komplett grün, grafischer Installer echt getestet
 
