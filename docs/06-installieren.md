@@ -70,7 +70,7 @@ ohne Neuinstallation von Windows. Hake das vorher ab:
 ## 1. ISO holen
 
 Auf der Download-Seite **https://github.com/kr511/Linux/releases/latest**
-unter **Assets** die `kairo-1.0-JJJJ.MM.TT-x86_64.iso` und `SHA256SUMS`
+unter **Assets** die `kairo-<version>-JJJJ.MM.TT-x86_64.iso` und `SHA256SUMS`
 herunterladen. Jedes Release hat vorher alle automatischen Tests bestanden.
 
 Prüfsumme vergleichen (PowerShell): `Get-FileHash .\kairo-*.iso` muss den
@@ -99,7 +99,8 @@ Beim Einschalten des PCs die Setup-Taste drücken (meist `Entf`, `F2` oder `F12`
 ## 4. Live-System und Installation
 
 1. Im Bootmenü **"Kairo OS Live (x86_64, UEFI)"** wählen (startet nach 15 s von selbst).
-2. Der GNOME-Desktop startet mit einem Begrüßungsfenster. Klicke zuerst auf
+2. GNOME startet in der Übersicht, darin das Begrüßungsfenster. Klicke es an
+   (oder drücke `Esc`), damit es groß im Vordergrund steht. Klicke zuerst auf
    **Hardware prüfen**: Es zeigt, ob Grafik (AMD-Treiber), WLAN, Ton,
    Internet und Festplatte passen. Bei ❌ erst das Problem lösen.
    Beides ("Hardware prüfen", "Kairo installieren") ist auch im Dock links.
@@ -138,8 +139,11 @@ Lieber im Terminal? `sudo kairo-install` stellt dieselben Fragen ohne Fenster.
 
 Die installierte Firewall blockiert unaufgeforderte eingehende Verbindungen
 für IPv4 und IPv6. Surfen, Downloads, Steam als Client und Discord können
-ausgehende Verbindungen herstellen. Für eigene Spielserver oder andere
-gehostete Dienste sind gezielte Regeln in `/etc/nftables.conf` erforderlich.
+ausgehende Verbindungen herstellen. Aus dem eigenen Heimnetz (private
+Adressen) sind Steam Remote Play, die Spiele-Übertragung zwischen eigenen PCs
+und mDNS (Drucker, Chromecast) erlaubt, aus dem Internet nicht. Für eigene
+Spielserver oder andere gehostete Dienste sind gezielte Regeln in
+`/etc/nftables.conf` erforderlich, danach `sudo systemctl reload nftables`.
 Die Firewall nicht pauschal abschalten.
 
 - **Kairo Update** (im App-Menü) zeigt, wie viele Updates da sind, und

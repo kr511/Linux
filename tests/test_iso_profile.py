@@ -37,6 +37,20 @@ class OverlayFilesTest(unittest.TestCase):
             with self.subTest(paket=pkg):
                 self.assertRegex(pkg, PKGNAME_RE)
 
+    def test_firewall_dienst_bleibt_aktiv(self):
+        # Archs nftables.service ist oneshot ohne RemainAfterExit; ohne Drop-in
+        # meldet systemd "inactive", obwohl die Regeln geladen sind
+        target = ISO / "airootfs/usr/local/share/kairo/target"
+        ini = configparser.ConfigParser()
+        ini.read(target / "etc/systemd/system/nftables.service.d/kairo.conf")
+        self.assertEqual(ini["Service"]["RemainAfterExit"], "yes")
+        rules = (target / "etc/nftables.conf").read_text()
+        self.assertIn("policy drop;", rules)
+        # Steam-Freigaben nur aus dem Heimnetz, nie für alle Quellen
+        for line in rules.splitlines():
+            if "dport" in line and "27036" in line:
+                self.assertRegex(line, r"saddr @heimnetz[46] ")
+
     def test_hostname(self):
         self.assertEqual((ISO / "airootfs/etc/hostname").read_text().strip(),
                          "kairo")

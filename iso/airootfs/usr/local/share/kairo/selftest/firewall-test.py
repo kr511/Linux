@@ -63,8 +63,15 @@ def main():
         for address in ("192.0.2.1", "2001:db8::1"):
             if reachable(address):
                 raise RuntimeError("Unaufgeforderte eingehende Verbindung erlaubt")
-        # Outbound TCP, DNS and response traffic must remain functional.
-        run("curl", "--fail", "--silent", "--max-time", "30", "https://archlinux.org/")
+        # Outbound TCP, DNS and response traffic must remain functional. Any one
+        # host is enough: archlinux.org itself sometimes drops TLS connections.
+        for url in ("https://archlinux.org/", "https://geo.mirror.pkgbuild.com/",
+                    "https://github.com/"):
+            if subprocess.run(["curl", "--fail", "--silent", "--output", "/dev/null",
+                               "--max-time", "30", url]).returncode == 0:
+                break
+        else:
+            raise RuntimeError("Ausgehende HTTPS-Verbindungen blockiert")
         print("FIREWALL_PROBE=ok")
     finally:
         if handle is not None:

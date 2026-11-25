@@ -19,16 +19,24 @@ Installationstest (--install [--encrypt]), nur UEFI:
      testet dann kairo-rollback und startet neu
   4. Dritter Start: Ist das System wirklich zurückgesetzt?
 
+Grafischer Installationstest (--install --gui [--encrypt]): wie oben, aber
+Schritt 2 läuft über die echten Fenster: Willkommensfenster -> Installieren ->
+kairo-install-gui. Der Test liest den Bildschirm per OCR (tesseract), klickt
+mit einem virtuellen Grafiktablett auf die Knöpfe und tippt wie eine echte
+deutsche Tastatur. Nur die Datei /run/kairo-selftest (legt der Test als root
+an) sorgt dafür, dass zusätzlich der Selbsttest installiert wird.
+
 Ergebnis: Screenshots (*.png), serial*.log und summary.md im Ausgabeordner.
 Exit-Code 0 nur, wenn alle Prüfungen bestanden sind.
 
 Aufruf:
-  scripts/boot-test.py [--bios | --install] [--out DIR] ISO
+  scripts/boot-test.py [--bios | --install [--gui] [--encrypt]] [--out DIR] ISO
 
 Nur Python-Standardbibliothek. Ändert nichts außerhalb von --out.
 """
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -38,6 +46,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 from pathlib import Path
 
 # UEFI-Firmware: Arch (edk2-ovmf) oder Debian/Ubuntu (ovmf)
@@ -55,6 +64,7 @@ CHECK_CMD = (
     "cat /etc/motd; cat /etc/os-release; hostnamectl; bootctl status; "
     "echo HOOKS: $(ls /etc/pacman.d/hooks/); ping -c 3 -w 20 archlinux.org; "
     "curl -sSI -m 30 https://archlinux.org | head -1; "
+    "curl -sSI -m 30 https://geo.mirror.pkgbuild.com | head -1; "
     "echo GDM=$(systemctl is-active gdm); echo NM=$(systemctl is-active NetworkManager); "
     "echo LIVEUSER=$(id -nG kairo); loginctl list-sessions --no-legend; "
     "echo GDM_LOGO=$(DCONF_PROFILE=gdm dconf read /org/gnome/login-screen/logo); "
@@ -139,6 +149,21 @@ class Qmp:
         self.cmd("screendump", filename=str(path), format="png")
         log(f"Screenshot: {path.name}")
 
+    def click(self, x, y, width, height):
+        """Linksklick an Bildschirmpunkt (x, y) über das virtuelle Grafiktablett."""
+        # Kein "device" bei input-send-event: Das wäre die Grafikkarte. QEMU gibt
+        # absolute Koordinaten von selbst an das Tablett.
+        def scale(v, size):
+            return max(0, min(0x7FFF, round(v * 0x7FFF / max(size - 1, 1))))
+        self.cmd("input-send-event", events=[
+            {"type": "abs", "data": {"axis": "x", "value": scale(x, width)}},
+            {"type": "abs", "data": {"axis": "y", "value": scale(y, height)}}])
+        time.sleep(0.3)
+        for down in (True, False):
+            self.cmd("input-send-event", events=[
+                {"type": "btn", "data": {"down": down, "button": "left"}}])
+            time.sleep(0.15)
+
     def type_german(self, text):
         # Physical QEMU keys interpreted by de-latin1, not pasted US text.
         for ch in text:
@@ -180,7 +205,7 @@ def wait_for(path, needles, timeout, poke=None, every=10, first_poke=0):
 class Vm:
     """Eine QEMU-VM ohne Fenster, gesteuert über QMP."""
 
-    def __init__(self, tmp, serial, iso=None, disk=None, uefi=True):
+    def __init__(self, tmp, serial, iso=None, disk=None, uefi=True, tablet=False):
         self.serial = serial
         serial.unlink(missing_ok=True)
         qmp_path = tmp / f"qmp-{serial.stem}.sock"
@@ -197,6 +222,9 @@ class Vm:
             "-qmp", f"unix:{qmp_path},server=on,wait=off",
             "-no-reboot",
         ]
+        if tablet:
+            # Absolute Mauskoordinaten: Klicks landen genau dort, wo OCR den Knopf sieht
+            cmd += ["-device", "qemu-xhci,id=xhci", "-device", "usb-tablet,id=tablet0,bus=xhci.0"]
         if iso:
             cmd += ["-device", "virtio-scsi-pci,id=scsi0",
                     "-device", "scsi-cd,bus=scsi0.0,drive=cdrom0",
@@ -261,6 +289,176 @@ def has(output, pattern):
     return re.search(pattern, output, re.MULTILINE) is not None
 
 
+
+# --- Grafischer Installationstest: Bildschirm lesen und klicken -------------------
+
+# Befehle als Live-Benutzer kairo (uid 1000) in dessen GNOME-Sitzung
+AS_LIVE_USER = ("runuser -u kairo -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus "
+                "XDG_RUNTIME_DIR=/run/user/1000 ")
+GUI_USER_PASSWORD = "kairotest"
+
+
+class GuiError(RuntimeError):
+    pass
+
+
+def png_size(path):
+    head = Path(path).read_bytes()[:24]
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
+def png_to_text_pgm(png, pgm, limit=150):
+    """Helle Schrift wird schwarz auf Weiß (PGM), alles andere weiß.
+
+    tesseract liest helle Schrift auf den grauen Fenstern des dunklen
+    GNOME-Designs sonst nicht (Lauf 45691778996: Fenster sichtbar, OCR leer).
+    Nur Standardbibliothek: 8-Bit-RGB/RGBA-PNG ohne Interlacing (QEMU screendump).
+    """
+    data = Path(png).read_bytes()
+    pos, idat = 8, b""
+    while pos < len(data):
+        size = int.from_bytes(data[pos:pos + 4], "big")
+        kind, chunk = data[pos + 4:pos + 8], data[pos + 8:pos + 8 + size]
+        pos += 12 + size
+        if kind == b"IHDR":
+            width, height = int.from_bytes(chunk[0:4], "big"), int.from_bytes(chunk[4:8], "big")
+            bpp = {2: 3, 6: 4}[chunk[9]]
+        elif kind == b"IDAT":
+            idat += chunk
+    raw = zlib.decompress(idat)
+    stride = width * bpp
+    prev = bytearray(stride)
+    out = bytearray()
+    i = 0
+    for _ in range(height):
+        kind = raw[i]
+        line = bytearray(raw[i + 1:i + 1 + stride])
+        i += 1 + stride
+        if kind == 1:
+            for x in range(bpp, stride):
+                line[x] = (line[x] + line[x - bpp]) & 255
+        elif kind == 2:
+            line = bytearray((a + b) & 255 for a, b in zip(line, prev))
+        elif kind == 3:
+            for x in range(stride):
+                left = line[x - bpp] if x >= bpp else 0
+                line[x] = (line[x] + (left + prev[x]) // 2) & 255
+        elif kind == 4:
+            for x in range(stride):
+                a = line[x - bpp] if x >= bpp else 0
+                b, c = prev[x], (prev[x - bpp] if x >= bpp else 0)
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        out += bytes(0 if max(line[x:x + 3]) > limit else 255 for x in range(0, stride, bpp))
+        prev = line
+    Path(pgm).write_bytes(b"P5 %d %d 255\n" % (width, height) + bytes(out))
+
+
+def ocr_words(path):
+    """Erkannte Wörter mit Position: [(text, links, oben, breite, höhe), ...]"""
+    out = subprocess.run(["tesseract", str(path), "stdout", "-l", "deu+eng", "--psm", "11", "tsv"],
+                         check=True, capture_output=True, text=True).stdout
+    words = []
+    for line in out.splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) == 12 and parts[11].strip():
+            words.append((parts[11].strip(), *map(int, parts[6:10])))
+    return words
+
+
+class Screen:
+    """Liest den VM-Bildschirm per OCR und klickt auf erkannte Wörter."""
+
+    def __init__(self, vm, out):
+        self.vm, self.out, self.n = vm, out, 0
+        self.words, self.size, self.text = [], (1, 1), ""
+
+    def read(self, path):
+        """Bildschirm lesen: helle Schrift (Fenster im dunklen Design) und normal."""
+        self.vm.qmp.cmd("screendump", filename=str(path), format="png")
+        pgm = path.with_suffix(".pgm")
+        png_to_text_pgm(path, pgm)
+        self.words = ocr_words(pgm) + ocr_words(path)
+        pgm.unlink()
+        self.size = png_size(path)
+        self.text = " ".join(w[0] for w in self.words)
+        return self.text
+
+    def wait(self, name, pattern, timeout=180):
+        """Wartet, bis `pattern` (Regex) am Bildschirm steht. Bild: gui-NN-<name>.png"""
+        self.n += 1
+        path = self.out / f"gui-{self.n:02d}-{name}.png"
+        deadline = time.monotonic() + timeout
+        while True:
+            if re.search(pattern, self.read(path), re.I):
+                log(f"GUI {name}: erkannt ({path.name}), OCR: {self.text[:400]!r}")
+                log_png(path)
+                return self.text
+            if time.monotonic() > deadline:
+                raise GuiError(f"{name}: {pattern!r} nicht am Bildschirm, OCR sah {self.text[:300]!r}")
+            time.sleep(5)
+
+    def find(self, pattern):
+        """Das unterste Wort, das ganz auf `pattern` passt (Knöpfe sind unten)."""
+        hits = [w for w in self.words if re.fullmatch(pattern, w[0], re.I)]
+        if not hits:
+            raise GuiError(f"{pattern!r} nicht gefunden, OCR sah {self.text[:300]!r}")
+        return max(hits, key=lambda w: w[2])
+
+    def click_at(self, x, y):
+        self.vm.qmp.click(x, y, *self.size)
+
+    def click(self, pattern):
+        _, left, top, width, height = self.find(pattern)
+        self.click_at(left + width / 2, top + height / 2)
+        time.sleep(3)
+
+    def type_into_entry(self, prompt, button, text, check_visible=True):
+        """Klickt in das Eingabefeld zwischen Fragetext und Knopfzeile und tippt.
+
+        zenity --entry: Text oben, darunter das Feld, darunter die Knöpfe. OCR sieht
+        das leere Feld nicht, darum mehrere Höhen probieren, bis der getippte Text
+        zu lesen ist.
+        """
+        _, p_left, p_top, _, p_height = self.find(prompt)
+        _, b_left, b_top, b_width, _ = self.find(button)
+        # Nur Wörter im Fenster (zwischen Fragetext und Knopf), nicht Dock oder Leiste
+        text_bottom = max(w[2] + w[4] for w in self.words
+                          if p_top - 5 <= w[2] < b_top - 30
+                          and p_left - 60 <= w[1] <= b_left + b_width + 60)
+        x = (p_left + b_left + b_width) / 2
+        # Nicht zu tief: ein Klick auf die Knopfzeile würde das Fenster abschicken
+        # Lauf 45691778996: Text unten 409, Knopftext oben 498, Feld 418-450
+        for frac in (0.3, 0.2, 0.4, 0.5):
+            self.click_at(x, text_bottom + (b_top - text_bottom) * frac)
+            time.sleep(1)
+            self.vm.qmp.keys("ctrl", "a")
+            self.vm.qmp.type_german(text)
+            time.sleep(2)
+            if not check_visible or re.search(re.escape(text), self.read(self.out / "gui-eingabe.png"), re.I):
+                return
+        raise GuiError(f"Eingabe {text!r} nicht im Feld gelandet, OCR sah {self.text[:300]!r}")
+
+    def fill_passwords(self, password):
+        """zenity --forms mit zwei Passwortfeldern: Feld rechts neben der Beschriftung."""
+        again = self.find(r"Wiederholen:?")
+        _, a_left, a_top, a_width, a_height = again
+        # Beschriftung "Passwort" in derselben Spalte direkt über "Wiederholen"
+        # (links- oder rechtsbündige Beschriftungen: eine der Kanten passt)
+        labels = [w for w in self.words if re.fullmatch(r"Passwort:?", w[0], re.I)
+                  and w[2] < a_top and (abs(w[1] - a_left) < 60
+                                        or abs(w[1] + w[3] - a_left - a_width) < 60)]
+        if not labels:
+            raise GuiError(f"Beschriftung Passwort nicht gefunden, OCR sah {self.text[:300]!r}")
+        first = max(labels, key=lambda w: w[2])
+        x = a_left + a_width + 90
+        for _, _, top, _, height in (first, again):
+            self.click_at(x, top + height / 2)
+            time.sleep(1)
+            self.vm.qmp.type_german(password)
+            time.sleep(1)
+
 def unlock(vm, args, prefix):
     """Exercise the visible Plymouth dialog; never install a test unlock key."""
     if not args.encrypt:
@@ -272,7 +470,8 @@ def unlock(vm, args, prefix):
         result = subprocess.run(["tesseract", str(path), "stdout", "-l", "eng+deu",
                                  "--psm", "11"], check=True, capture_output=True, text=True)
         seen["text"] = " ".join(result.stdout.split())
-        return re.search(r"passwor|passwör|passphrase|entsperr|unlock", result.stdout, re.I)
+        # OCR schneidet Wörter manchmal ab ("Please enter passphr: isk Kairo")
+        return re.search(r"passw|passph|entsperr|unlock", result.stdout, re.I)
 
     seen = {"text": ""}
     deadline = time.monotonic() + args.boot_timeout
@@ -312,8 +511,9 @@ def evaluate_live(output, boot, powered_off):
         ("hostnamectl: Operating System: Kairo OS", has(output, r"Operating System: Kairo OS")),
         # GitHub-Runner (Azure) lassen kein ICMP nach außen durch, ping bekommt
         # dort nie Antworten. Darum zählt auch eine HTTPS-Antwort von
-        # archlinux.org als "Netzwerk geht".
-        ("Netzwerk: archlinux.org antwortet (ping oder HTTPS)",
+        # archlinux.org oder dem Arch-Mirror als "Netzwerk geht" (archlinux.org
+        # selbst bricht manchmal TLS-Verbindungen ab, Lauf 45679858733).
+        ("Netzwerk: archlinux.org oder Arch-Mirror antwortet (ping oder HTTPS)",
          has(output, r"\b[1-9]\d* received") or has(output, r"^HTTP/\S+ [23]\d\d")),
         ("Desktop: GDM läuft", has(output, r"^GDM=active")),
         ("Desktop: GNOME-Sitzung des Live-Benutzers kairo", has(output, r"^\s*\d+\s+1000\s+kairo\b")),
@@ -470,6 +670,144 @@ def run_live(args, tmp):
     return write_summary(args.out, f"Live-Test {boot.upper()}: `{args.iso.name}`", checks)
 
 
+
+def install_via_gui(vm, args, serial):
+    """Phase 1 über die echten Fenster, so wie ein Mensch mit Maus und Tastatur.
+
+    Gibt (Ergebnis von kairo-install oder None, zusätzliche Prüfungen) zurück.
+    """
+    scr = Screen(vm, args.out)
+    seen = {"welcome": False, "serial": False, "summary": False, "done": False}
+    result = None
+
+    def checks():
+        return [
+            ("GUI: Willkommensfenster, Knopf Installieren startet den Installer", seen["welcome"]),
+            ("GUI: Laufwerksliste zeigt die Seriennummer", seen["serial"]),
+            ("GUI: Zusammenfassung zeigt Laufwerk, Seriennummer und Verschlüsselung",
+             seen["summary"]),
+            ("GUI: Meldung \"Kairo ist installiert\"", seen["done"]),
+        ]
+
+    # Als root auf tty5: Markierung für den Selbsttest, größere Schrift für die
+    # OCR, dann zum Bildschirm der GNOME-Sitzung wechseln
+    vm.qmp.type("touch /run/kairo-selftest; " + AS_LIVE_USER +
+                "gsettings set org.gnome.desktop.interface text-scaling-factor 1.25; "
+                "echo GNOME_VT=$(loginctl show-session $(loginctl list-sessions --no-legend "
+                "| awk '$3 == \"kairo\" {print $1; exit}') -p VTNr --value) > /dev/ttyS0\n")
+    wait_for(serial, "GNOME_VT=", 60)
+    m = re.search(r"GNOME_VT=(\d+)", serial.read_text(errors="replace"))
+    vt = m.group(1) if m else "2"
+    vm.qmp.type(f"chvt {vt}\n")
+    time.sleep(10)
+    # Erst weiter, wenn wirklich GNOME zu sehen ist: Die Begrüßung auf tty5
+    # enthält selbst "Willkommen bei Kairo" (Lauf 45702318120)
+    for _ in range(6):
+        if "(tty5)" not in scr.read(args.out / "gui-00-start.png"):
+            break
+        log("Noch auf der Konsole, wechsle erneut zu GNOME")
+        vm.qmp.type(f"chvt {vt}\n")
+        time.sleep(10)
+    try:
+        # GNOME startet in der Übersicht: Esc zeigt den Desktop mit dem Fenster.
+        # Nur dann Esc, sonst würde Esc das Willkommensfenster schließen.
+        for _ in range(3):
+            if not re.search(r"Type to search|Zum Suchen", scr.read(args.out / "gui-00-start.png"), re.I):
+                break
+            vm.qmp.keys("esc")
+            time.sleep(5)
+        try:
+            # Nur Wörter aus dem Fenster, nicht aus der Konsolen-Begrüßung
+            scr.wait("willkommen", r"Erst ausprobieren", 180)
+            scr.click(r"Installieren")
+            seen["welcome"] = True
+        except GuiError as e:
+            # Weitertesten, damit ein Fehler hier nicht den Rest verdeckt
+            log(f"FEHLER: {e}")
+            vm.qmp.keys("ctrl", "alt", "f5")
+            time.sleep(3)
+            vm.qmp.type(AS_LIVE_USER + f"systemd-run --user gtk-launch kairo-install; chvt {vt}\n")
+            time.sleep(10)
+
+        scr.wait("start", r"ganze\s+Festplatte", 180)
+        scr.click(r"Weiter")
+
+        text = scr.wait("laufwerk", r"Auf welche Festplatte", 180)
+        seen["serial"] = bool(re.search(r"KAIRO.?VM.?SSD", text, re.I))
+        scr.click(r"Weiter")
+
+        scr.wait("benutzer", r"Benutzername", 120)
+        scr.type_into_entry(r"Benutzername", r"_?OK", "tester")
+        scr.click(r"_?OK")
+
+        scr.wait("passwort", r"Wiederholen", 120)
+        scr.fill_passwords(GUI_USER_PASSWORD)
+        scr.click(r"_?OK")
+
+        scr.wait("verschluesselung", r"verschl.sseln\?", 120)
+        if args.encrypt:
+            # Vorausgewählt ist "Verschlüsseln": nur Weiter. CRYPT=1 im
+            # installierten System beweist, dass die Vorauswahl stimmt.
+            scr.click(r"Weiter")
+            scr.wait("verschluesselung-passwort", r"mindestens 8 Zeichen|Wiederholen", 120)
+            scr.fill_passwords(CRYPT_PASSWORD)
+            scr.click(r"_?OK")
+        else:
+            scr.click(r"Nicht")  # Zeile "Nicht verschlüsseln"
+            scr.click(r"Weiter")
+
+        text = scr.wait("zusammenfassung", r"Zusammenfassung", 120)
+        seen["summary"] = bool(
+            re.search(r"/dev/vda", text) and re.search(r"KAIRO.?VM.?SSD", text, re.I)
+            and re.search(r"Verschl.sselung:?\s*" + ("ja" if args.encrypt else "nein"), text, re.I))
+        scr.type_into_entry(r"eintippen:?", r"Installieren", "LOESCHEN")
+        scr.click(r"Installieren")
+
+        log("Installation läuft (Fortschrittsfenster)")
+        started = time.monotonic()
+        while result is None and time.monotonic() - started < args.install_timeout:
+            result = wait_for(serial, ["KAIRO_INSTALL_DONE", "KAIRO_INSTALL_FAILED"], 300)
+            scr.read(args.out / "gui-fortschritt.png")
+            log(f"... {int((time.monotonic() - started) / 60)} min, OCR: {scr.text[:120]!r}")
+        if result == "KAIRO_INSTALL_DONE":
+            scr.wait("fertig", r"ist installiert", 180)
+            seen["done"] = True
+            scr.click(r"Sp.ter")
+    except GuiError as e:
+        log(f"FEHLER im grafischen Installer: {e}")
+        gui_diagnose(vm, args, scr, serial)
+    finally:
+        vm.qmp.screenshot(args.out / "gui-99-ende.png")
+        vm.qmp.keys("ctrl", "alt", "f5")
+        time.sleep(3)
+    return result, checks()
+
+
+def log_png(path):
+    """Bild als base64 ins CI-Protokoll (Artifacts sind nicht überall abrufbar).
+
+    Zurück: awk '/===PNG_BEGIN name/{f=1;next}/===PNG_END/{f=0}f' log | base64 -d
+    """
+    print(f"===PNG_BEGIN {path.name}", flush=True)
+    print(base64.b64encode(Path(path).read_bytes()).decode(), flush=True)
+    print("===PNG_END", flush=True)
+
+
+def gui_diagnose(vm, args, scr, serial):
+    """Alles für die Fehlersuche ins CI-Protokoll, auch wenn Artifacts fehlen."""
+    path = args.out / "gui-fehler.png"
+    scr.read(path)
+    log("OCR-Wörter (Text, links, oben, Breite, Höhe): " + repr(scr.words))
+    log_png(path)
+    vm.qmp.keys("ctrl", "alt", "f5")
+    time.sleep(3)
+    vm.qmp.type("{ echo '===GUILOG_BEGIN'; cat /tmp/kairo-install-gui.log; "
+                "ps -eo pid,args | grep -E '[z]enity|[k]airo-install'; "
+                "echo '===GUILOG_END'; } > /dev/ttyS0 2>&1\n")
+    wait_for(serial, "===GUILOG_END", 30)
+    log("Protokoll von kairo-install-gui:\n" + section(serial, "===GUILOG_BEGIN", "===GUILOG_END"))
+
+
 def run_install(args, tmp):
     disk = tmp / "disk.qcow2"
     subprocess.run(["qemu-img", "create", "-q", "-f", "qcow2", str(disk), "40G"], check=True)
@@ -477,27 +815,34 @@ def run_install(args, tmp):
     # --- Phase 1: vom USB-Stick (ISO) auf die leere Festplatte installieren ---
     serial1 = args.out / "serial-install.log"
     log(f"Starte {args.iso} mit leerer 40-GiB-Festplatte")
-    vm = Vm(tmp, serial1, iso=args.iso, disk=disk)
+    vm = Vm(tmp, serial1, iso=args.iso, disk=disk, tablet=args.gui)
+    gui_checks = []
     try:
         if not vm.console(args.boot_timeout):
             vm.qmp.screenshot(args.out / "install-1-timeout.png")
             sys.exit("FEHLER: Live-System nicht bereit")
-        time.sleep(15)
-        vm.qmp.keys("ctrl", "alt", "f1")
-        time.sleep(4)
-        vm.qmp.screenshot(args.out / "install-1-live-desktop.png")
-        vm.qmp.keys("ctrl", "alt", "f5")
-        time.sleep(2)
+        if args.gui:
+            # GNOME braucht nach der Konsole noch etwas, bis der Desktop steht
+            time.sleep(30)
+            log("Installiere über die Fenster (Willkommen -> kairo-install-gui)")
+            result, gui_checks = install_via_gui(vm, args, serial1)
+        else:
+            time.sleep(15)
+            vm.qmp.keys("ctrl", "alt", "f1")
+            time.sleep(4)
+            vm.qmp.screenshot(args.out / "install-1-live-desktop.png")
+            vm.qmp.keys("ctrl", "alt", "f5")
+            time.sleep(2)
 
-        log("Starte kairo-install (ohne Rückfragen)")
-        vm.qmp.type((INSTALL_CMD_CRYPT if args.encrypt else "KAIRO_ENCRYPT=0 " + INSTALL_CMD) + "\n")
-        started = time.monotonic()
-        result = None
-        while result is None and time.monotonic() - started < args.install_timeout:
-            result = wait_for(serial1, ["KAIRO_INSTALL_DONE", "KAIRO_INSTALL_FAILED"], 300)
-            minutes = int((time.monotonic() - started) / 60)
-            vm.qmp.screenshot(args.out / "install-2-fortschritt.png")
-            log(f"... {minutes} min")
+            log("Starte kairo-install (ohne Rückfragen)")
+            vm.qmp.type((INSTALL_CMD_CRYPT if args.encrypt else "KAIRO_ENCRYPT=0 " + INSTALL_CMD) + "\n")
+            started = time.monotonic()
+            result = None
+            while result is None and time.monotonic() - started < args.install_timeout:
+                result = wait_for(serial1, ["KAIRO_INSTALL_DONE", "KAIRO_INSTALL_FAILED"], 300)
+                minutes = int((time.monotonic() - started) / 60)
+                vm.qmp.screenshot(args.out / "install-2-fortschritt.png")
+                log(f"... {minutes} min")
         installed = result == "KAIRO_INSTALL_DONE"
         if not installed:
             # Protokoll für die Fehlersuche auf die serielle Schnittstelle
@@ -510,9 +855,10 @@ def run_install(args, tmp):
     finally:
         vm.kill()
 
-    title = f"Installationstest{' mit Verschlüsselung' if args.encrypt else ''}: `{args.iso.name}`"
+    title = (f"{'Grafischer ' if args.gui else ''}Installationstest"
+             f"{' mit Verschlüsselung' if args.encrypt else ''}: `{args.iso.name}`")
     if not installed:
-        write_summary(args.out, title, evaluate_install(False, "", "", False, args.encrypt))
+        write_summary(args.out, title, gui_checks + evaluate_install(False, "", "", False, args.encrypt))
         return False
 
     # --- Phase 2: ohne USB-Stick von der Festplatte starten -------------------
@@ -543,7 +889,7 @@ def run_install(args, tmp):
 
     # --- Phase 3: nach dem Zurückrollen ---------------------------------------
     if result != "===SELFTEST_END":
-        write_summary(args.out, title, evaluate_install(
+        write_summary(args.out, title, gui_checks + evaluate_install(
             True, section(serial2, "===SELFTEST_BEGIN", "===SELFTEST_END"), "", False, args.encrypt))
         return False
 
@@ -562,7 +908,7 @@ def run_install(args, tmp):
     finally:
         vm.kill()
 
-    checks = evaluate_install(
+    checks = gui_checks + evaluate_install(
         True, section(serial2, "===SELFTEST_BEGIN", "===SELFTEST_END"),
         section(serial3, "===ROLLBACK_BEGIN", "===ROLLBACK_END"), powered_off, args.encrypt)
     return write_summary(args.out, title, checks)
@@ -577,6 +923,8 @@ def main():
                       help="Installationstest auf virtueller Festplatte (UEFI)")
     ap.add_argument("--encrypt", action="store_true",
                     help="mit --install: mit Verschlüsselung installieren")
+    ap.add_argument("--gui", action="store_true",
+                    help="mit --install: über die Fenster installieren (OCR, Klicks)")
     ap.add_argument("--out", type=Path, default=Path("boot-test"))
     ap.add_argument("--boot-timeout", type=int, default=600,
                     help="Sekunden bis zur Konsole (ohne KVM deutlich mehr nötig)")
@@ -584,8 +932,8 @@ def main():
                     help="Sekunden für Installation bzw. ersten Start")
     args = ap.parse_args()
 
-    if args.encrypt and not args.install:
-        ap.error("--encrypt geht nur zusammen mit --install")
+    if (args.encrypt or args.gui) and not args.install:
+        ap.error("--encrypt und --gui gehen nur zusammen mit --install")
     if not args.iso.is_file():
         sys.exit(f"FEHLER: ISO nicht gefunden: {args.iso}")
     args.out.mkdir(parents=True, exist_ok=True)

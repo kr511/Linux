@@ -15,6 +15,10 @@ w=480
 
 error() { zenity --error --title="${title}" --width="${w}" --text="$1"; }
 
+# Ablauf für Fehlermeldungen festhalten (nie Passwörter): /tmp/kairo-install-gui.log
+trace() { printf '%s %s\n' "$(date +%T)" "$*" >> /tmp/kairo-install-gui.log 2>/dev/null || true; }
+trace "gestartet"
+
 # --- Willkommen ------------------------------------------------------------------
 
 zenity --question --title="${title}" --icon="${icon}" --width="${w}" \
@@ -45,12 +49,18 @@ for d in "${disks[@]}"; do
     rows+=(FALSE "${dev}" "${size} GiB" "${model:-unbekannt}" "${serial}" "${identity}")
 done
 rows[0]=TRUE
+default_disk="${rows[1]}"
 disk="$(zenity --list --radiolist --title="${title}" --width=620 --height=360 \
-    --text="Auf welche Festplatte soll Kairo? <b>Sie wird komplett gelöscht.</b>\n(Der USB-Stick, von dem Kairo läuft, steht nicht in der Liste.)" \
+    --text="Auf welche Festplatte soll Kairo? Sie wird KOMPLETT GELÖSCHT.\n(Der USB-Stick, von dem Kairo läuft, steht nicht in der Liste.)" \
     --column="" --column="Gerät" --column="Größe" --column="Modell" \
     --column="Seriennummer" --column="Identität" --hide-column=6 \
-    --print-column=2 --ok-label="Weiter" "${rows[@]}")" || exit 0
-[[ -n "${disk}" ]] || exit 0
+    --print-column=2 --ok-label="Weiter" "${rows[@]}")"
+status=$?
+trace "laufwerk: status=${status} auswahl=${disk:-leer}"
+(( status == 0 )) || exit 0
+# Weiter ohne die Vorauswahl anzufassen: zenity gibt dann nichts aus, gemeint ist
+# aber die sichtbar vorausgewählte erste Zeile (falls zenity dann leer zurückgibt)
+[[ -n "${disk}" ]] || disk="${default_disk}"
 IFS=$'\t' read -r _ _ model serial identity \
     < <(printf '%s\n' "${disks[@]}" | awk -F '\t' -v d="${disk}" '$1 == d')
 [[ -n "${identity}" ]] || { error "Laufwerk nicht eindeutig identifizierbar."; exit 1; }
@@ -59,10 +69,13 @@ IFS=$'\t' read -r _ _ model serial identity \
 
 while true; do
     user="$(zenity --entry --title="${title}" --width="${w}" \
-        --text="Benutzername (nur Kleinbuchstaben, Ziffern, - und _), z. B. <b>elias</b>:")" || exit 0
+        --text="Benutzername (nur Kleinbuchstaben, Ziffern, Binde- und Unterstrich), z. B. elias:")" || exit 0
     [[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${user}" != root ]] && break
     error "\"${user}\" geht nicht. Nur Kleinbuchstaben, Ziffern, - und _, am Anfang ein Buchstabe."
 done
+
+# Hinweis: zenity 4 zeigt bei --entry, --list und --forms keine Auszeichnungen
+# wie <b> an (sie stünden wörtlich da) und schluckt "_" als Tastenkürzel.
 
 # ask_password <Text> <Mindestlänge>: Formular mit zwei Feldern
 ask_password() {
@@ -78,7 +91,7 @@ ask_password() {
     done
 }
 
-password="$(ask_password "Passwort für <b>${user}</b> (Anmelden und Administrator):" 1)" || exit 0
+password="$(ask_password "Passwort für ${user} (Anmelden und Administrator):" 1)" || exit 0
 
 # --- Verschlüsselung -----------------------------------------------------------------
 
@@ -87,7 +100,12 @@ crypt_password=""
 crypt_choice="$(zenity --list --radiolist --title="${title}" --width=520 --height=300 \
     --text="Festplatte verschlüsseln? Beim Start wird ein Passwort benötigt. Ohne dieses Passwort sind die Daten nicht wiederherstellbar." \
     --column="" --column="Auswahl" --ok-label="Weiter" --cancel-label="Abbrechen" \
-    TRUE "Verschlüsseln" FALSE "Nicht verschlüsseln")" || exit 0
+    TRUE "Verschlüsseln" FALSE "Nicht verschlüsseln")"
+status=$?
+trace "verschluesselung: status=${status} auswahl=${crypt_choice:-leer}"
+# Abbrechen ist ein Abbruch, nie "unverschlüsselt installieren"
+(( status == 0 )) || exit 0
+[[ -n "${crypt_choice}" ]] || crypt_choice="Verschlüsseln"  # Vorauswahl, siehe oben
 if [[ "${crypt_choice}" == Verschlüsseln ]]; then
     encrypt=1
     crypt_password="$(ask_password "Passwort für die Verschlüsselung (mindestens 8 Zeichen). Wird bei jedem Start abgefragt:" 8)" || exit 0
@@ -98,7 +116,7 @@ fi
 # --- Bestätigung --------------------------------------------------------------------
 
 answer="$(zenity --entry --title="${title}" --width=520 --ok-label="Installieren" \
-    --text="<b>Zusammenfassung</b>\n\nFestplatte: <b>${disk}</b> ${model}\nSeriennummer: ${serial}\nBenutzer: ${user}\nVerschlüsselung: $([[ "${encrypt}" == 1 ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\n<span foreground=\"#e5534b\"><b>ALLE DATEN AUF ${disk} WERDEN GELÖSCHT.</b></span>\n\nZum Fortfahren <b>LÖSCHEN</b> eintippen:")" || exit 0
+    --text="Zusammenfassung\n\nFestplatte: ${disk} ${model}\nSeriennummer: ${serial}\nBenutzer: ${user}\nVerschlüsselung: $([[ "${encrypt}" == 1 ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\nALLE DATEN AUF ${disk} WERDEN GELÖSCHT.\n\nZum Fortfahren LÖSCHEN eintippen:")" || exit 0
 if [[ "${answer}" != "LÖSCHEN" && "${answer}" != "LOESCHEN" ]]; then
     zenity --info --title="${title}" --width="${w}" --text="Abgebrochen, nichts wurde verändert."
     exit 0
@@ -113,8 +131,11 @@ env_args=(KAIRO_DISK="${disk}" KAIRO_DISK_ID="${identity}" KAIRO_USER="${user}" 
 if [[ "${encrypt}" == 1 ]]; then
     crypt_file="$(mktemp -p "${runtime}" kairo-crypt.XXXXXX)"
     printf '%s' "${crypt_password}" > "${crypt_file}"
-    env_args+=(KAIRO_ENCRYPT=1 KAIRO_CRYPT_PASSWORD_FILE="${crypt_file}")
+    env_args+=(KAIRO_CRYPT_PASSWORD_FILE="${crypt_file}")
 fi
+# Nur der automatische VM-Test (scripts/boot-test.py --gui) legt diese Datei
+# als root an. Dann installiert kairo-install zusätzlich den Selbsttest.
+if [[ -e /run/kairo-selftest ]]; then env_args+=(KAIRO_SELFTEST=1); fi
 unset password crypt_password
 
 # Ausgabe: "# Text" setzt die Beschriftung, Zahlen den Fortschritt
@@ -124,6 +145,7 @@ sudo env "${env_args[@]}" /usr/local/bin/kairo-install 2>&1 \
     | zenity --progress --title="${title}" --width=520 --no-cancel --auto-close \
         --text="Starte Installation ..."
 status="${PIPESTATUS[0]}"
+trace "kairo-install: status=${status}"
 rm -f -- "${pw_file}" "${crypt_file:-}" 2>/dev/null
 
 if (( status == 0 )); then
