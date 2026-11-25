@@ -700,6 +700,14 @@ def install_via_gui(vm, args, serial):
     vt = m.group(1) if m else "2"
     vm.qmp.type(f"chvt {vt}\n")
     time.sleep(10)
+    # Erst weiter, wenn wirklich GNOME zu sehen ist: Die Begrüßung auf tty5
+    # enthält selbst "Willkommen bei Kairo" (Lauf 45702318120)
+    for _ in range(6):
+        if "(tty5)" not in scr.read(args.out / "gui-00-start.png"):
+            break
+        log("Noch auf der Konsole, wechsle erneut zu GNOME")
+        vm.qmp.type(f"chvt {vt}\n")
+        time.sleep(10)
     try:
         # GNOME startet in der Übersicht: Esc zeigt den Desktop mit dem Fenster.
         # Nur dann Esc, sonst würde Esc das Willkommensfenster schließen.
@@ -709,7 +717,8 @@ def install_via_gui(vm, args, serial):
             vm.qmp.keys("esc")
             time.sleep(5)
         try:
-            scr.wait("willkommen", r"Willkommen bei Kairo|ausprobieren", 180)
+            # Nur Wörter aus dem Fenster, nicht aus der Konsolen-Begrüßung
+            scr.wait("willkommen", r"Erst ausprobieren", 180)
             scr.click(r"Installieren")
             seen["welcome"] = True
         except GuiError as e:
@@ -720,7 +729,7 @@ def install_via_gui(vm, args, serial):
             vm.qmp.type(AS_LIVE_USER + f"systemd-run --user gtk-launch kairo-install; chvt {vt}\n")
             time.sleep(10)
 
-        scr.wait("start", r"ganze\s+Festplatte|Kairo OS installieren", 180)
+        scr.wait("start", r"ganze\s+Festplatte", 180)
         scr.click(r"Weiter")
 
         text = scr.wait("laufwerk", r"Auf welche Festplatte", 180)
