@@ -8,11 +8,12 @@ set -uo pipefail
 title="Kairo Wiederherstellen"
 icon=kairo-logo
 
-# Passwortabfrage abgebrochen oder Fehler: nicht "keine Snapshots" behaupten
+# Passwortabfrage abgebrochen oder Fehler: nicht "keine Snapshots" behaupten.
+# pkexec: 126 = Abfrage weggeklickt, 127 = nicht berechtigt (das ist ein Fehler)
 list="$(pkexec /usr/local/bin/kairo-rollback --list 2>&1)"
 case $? in
     0) ;;
-    126|127) exit 0 ;;
+    126) exit 0 ;;
     *) zenity --error --title="${title}" --width=480 --no-markup \
            --text="Die Snapshots ließen sich nicht lesen: ${list}"
        exit 1 ;;

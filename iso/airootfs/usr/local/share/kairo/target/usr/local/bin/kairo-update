@@ -60,8 +60,9 @@ if (( status == 0 )); then
     else
         zenity --info --title="${title}" --icon="${icon}" --width=360 --text="Update fertig."
     fi
-elif (( status == 126 || status == 127 )); then
-    # pkexec: Passwort-Abfrage abgebrochen
+elif (( status == 126 )); then
+    # pkexec: Passwort-Abfrage weggeklickt. 127 (nicht berechtigt) ist ein
+    # Fehler und landet unten im Fehlerfenster.
     exit 0
 else
     zenity --text-info --title="${title}: Fehler" --width=700 --height=450 --filename="${log}"
