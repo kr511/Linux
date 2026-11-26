@@ -10,8 +10,12 @@ abhaken. Die **Windows-SSD abstecken**, solange du installierst.
 
 ## A. Live-System (nichts wird installiert)
 
-ISO von https://github.com/kr511/Linux/releases/latest, Prüfsumme vergleichen,
-mit Rufus im **DD-Modus** auf den Stick, Secure Boot aus, UEFI an.
+Am einfachsten mit **Claudus** unter Windows
+([`windows/claudus`](../windows/claudus/README.md)): Vorab-Check, ISO laden und
+prüfen, Stick schreiben und zurücklesen, Spickzettel mit deinen Tasten.
+Von Hand: ISO von https://github.com/kr511/Linux/releases/latest, Prüfsumme
+vergleichen, mit Rufus im **DD-Modus** auf den Stick. Dann Secure Boot aus,
+UEFI an.
 
 | # | Prüfen | Erwartet | ✓ |
 | --- | --- | --- | --- |
