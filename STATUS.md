@@ -9,14 +9,14 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 
 | Komponente | Status | Was genau geprüft ist |
 | --- | --- | --- |
-| Statische Tests (`tests/run-all.sh`) | 🟩 | shellcheck, 75 Python-Tests (10 ohne Kernelquellen/releng übersprungen); lokal und in CI bestanden |
-| ISO-Profil-Assembly | 🟩 | Gegen echtes releng aus archiso v91 zusammengebaut und geprüft |
-| ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 91, siehe Protokoll |
-| ISO bootet in QEMU (UEFI/BIOS) | ✅ | 1.0.1: UEFI 21/21, BIOS 19/19, Lauf 45696869385 |
+| Statische Tests (`tests/run-all.sh`) | 🟩 | shellcheck, 80 Python-Tests (ohne Kernelquellen/releng teils übersprungen); lokal und in CI bestanden |
+| ISO-Profil-Assembly | 🟩 | Gegen echtes releng aus archiso v92 zusammengebaut und geprüft |
+| ISO-Build mit `mkarchiso` | ✅ | GitHub Actions (`iso.yml`), archiso 92, siehe Protokoll |
+| ISO bootet in QEMU (UEFI/BIOS) | ✅ | UEFI 21/21, BIOS 19/19, Lauf 45751581254 |
 | `scripts/run-qemu.sh` | 🟩 | QEMU + UEFI-Firmware starten, CD wird erkannt, KVM→TCG-Fallback (Dummy-ISO) |
 | GNOME-Live-System (GDM, Autologin, NetworkManager) | 🟩 | `iso.yml` uefi 18/18, bios 17/17 (0.2 und 1.0) |
 | Kairo-Design (Logo, Hintergrund, Bootmenü, Anmeldebildschirm, Boot-Animation) | ✅ | Screenshots im Lauf 39992597552 |
-| `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 1.0.1: 53/53 und 53/53 (echter Passwortdialog, Firewall), Lauf 45696869385 |
+| `kairo-install` auf leere Festplatte (Btrfs, mit/ohne LUKS2) | ✅ | 55/55 und 55/55 (echter Passwortdialog, Firewall, Aufräumen alter Sicherungen, Update), Lauf 45751581254 |
 | Installiertes System startet, erster Start lädt alle Apps | ✅ | dito |
 | Native ChatGPT-Desktop-App (Web-Starter nur als Ersatz) | ✅ | Paket, Programm, Desktop-Eintrag, OpenAI-Repo, Web-Starter entfernt: Lauf 45696869385. Anmelden im Fenster nur von Hand |
 | Firewall (nftables, IPv4/IPv6) | ✅ | Dienst aktiv, Fremdzugriff aus eigenem Netz-Namespace blockiert, Kontrollmessung, ausgehend ok: Lauf 45696869385 |
@@ -33,6 +33,24 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | `linux-kairo` in der ISO | ⬜ | Erst nach erfolgreichem Einzeltest (Kairo 0.3) |
 
 ## Testprotokoll
+
+### 2026-11-26: Fehlersuche, Kairo 1.0.2
+
+- Umgebung: GitHub Actions, QEMU mit KVM, OVMF, archiso 92, Lauf 45751581254
+  (PR #19, Commit 1402578)
+- Ergebnis: Live UEFI 21/21, Live BIOS 19/19, Installation 55/55,
+  Installation mit Verschlüsselung 55/55, grafische Installation 59/59
+- Gefunden: Im installierten System legt systemd die Subvolumes
+  `@/var/lib/portables` und `@/var/lib/machines` an (`NESTED_SUBVOLUMES` im
+  Selbsttest). Daran wäre `kairo-rollback` ab der dritten Wiederherstellung
+  beim Löschen der ältesten Sicherung gescheitert, vor dem neuen Initramfs.
+  Behoben; der VM-Test schleust jetzt eine alte Sicherung mit Subvolume ein
+  und prüft, dass sie verschwindet (`ALT_BACKUPS=2`, `ALT_OLDEST=weg`).
+- Ebenfalls behoben: `kairo-install` hängte nach `die()` die Festplatte nicht
+  aus (ERR-Falle sieht `exit` nicht), Unterstriche verschwanden in der
+  GUI-Zusammenfassung, pkexec-Abbruch in Wiederherstellen/Update.
+- Neu geprüft: `kairo-update-root` läuft im installierten System durch.
+- Die Builds liefen schon mit archiso 92, Prüfungen und Doku standen auf 91.
 
 ### 2026-11-25: Kairo 1.0.1 veröffentlicht
 
