@@ -1,0 +1,2 @@
+# cmd.exe braucht CRLF, sonst gehen Sprungmarken kaputt
+*.cmd text eol=crlf

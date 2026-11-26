@@ -25,6 +25,7 @@ Legende: ⬜ offen · 🟨 vorbereitet (Dateien da, nie echt gebaut) ·
 | Grafischer Installer (`kairo-install-gui`) | ✅ | Echte Fenster in der VM: Willkommen → Installieren → alle Schritte per OCR und Mausklick, mit Verschlüsselung, danach voller Installationstest: 57/57, Lauf 45696869385 |
 | Release v1.0 (Download-Seite) | ✅ | https://github.com/kr511/Linux/releases/tag/v1.0, Lauf 40013204531, alle Tests grün |
 | Release v1.0.1 | ✅ | https://github.com/kr511/Linux/releases/tag/v1.0.1, Lauf 45716751357 auf `main` (ef2b16c): alle Tests inkl. grafischem Installer grün, ISO 1,6 GiB |
+| Claudus (Windows-Wechsel-Kit, `windows/claudus`) | 🟩 | Echtes Windows (Server 2025, PS 5.1 + 7), Lauf 45751582390: 54/54 Unit-Tests, echte Kairo-1.0.1-ISO auf virtuelle Platte geschrieben und identisch zurückgelesen, 11/11. Echter USB-Stick nur von Hand |
 | Installation auf deinem echten PC | ⬜ | Nur von Hand möglich: [`docs/07-test-auf-deinem-pc.md`](docs/07-test-auf-deinem-pc.md) |
 | `linux-kairo` PKGBUILD | 🟨 | Von echtem `makepkg --printsrcinfo` gelesen; **nie gebaut**, bewusst zurückgestellt (siehe [`FERTIG.md`](FERTIG.md)) |
 | `kairo.config` (47 Optionen) | 🟩 | Gegen echten Kconfig-Code 7.2.12 aufgelöst und verifiziert |

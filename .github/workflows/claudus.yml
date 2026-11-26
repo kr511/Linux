@@ -1,0 +1,44 @@
+# Claudus (Windows-Wechsel-Kit) auf echtem Windows testen.
+#
+# - Unit-Tests unter Windows PowerShell 5.1 (das hat Eli) und PowerShell 7
+# - echter Schreibtest: virtuelle Platte statt USB-Stick, echte Kairo-ISO
+#   laden, prüfen, schreiben, Bit für Bit zurücklesen
+#
+# Keine Secrets, nur Lesezugriff aufs Repo.
+
+name: Claudus (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths: ['windows/**', '.github/workflows/claudus.yml']
+  pull_request:
+    paths: ['windows/**', '.github/workflows/claudus.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Claudus auf Windows
+    runs-on: windows-2025
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Unit-Tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: .\windows\claudus\tests\Test-Claudus.ps1
+
+      - name: Unit-Tests (PowerShell 7)
+        shell: pwsh
+        run: .\windows\claudus\tests\Test-Claudus.ps1
+
+      - name: Claudus.ps1 -Action Check (Vorab-Check ohne Eingaben)
+        shell: powershell
+        run: .\windows\claudus\Claudus.ps1 -Action Check
+
+      - name: Echter Schreibtest auf virtuelle Platte (Kairo-ISO)
+        shell: powershell
+        run: .\windows\claudus\tests\Test-ClaudusWrite.ps1 -WorkDir "$env:RUNNER_TEMP\claudus"

@@ -27,6 +27,7 @@ Installer und eigenem Design.
 | [`kernel/`](kernel/) | `linux-kairo`: PKGBUILD, Kernel-Konfiguration, dokumentierte Patches |
 | [`desktop/`](desktop/) | Platzhalter (der GNOME-Desktop steckt in `iso/airootfs/`) |
 | [`packages/`](packages/) | Platzhalter für eigene Pakete |
+| [`windows/claudus/`](windows/claudus/) | **Claudus**: Wechsel-Kit für Windows (Vorab-Check, ISO prüfen, USB-Stick schreiben, Spickzettel) |
 | [`scripts/`](scripts/) | Build- und Testskripte |
 | [`tests/`](tests/) | Automatische Prüfungen (laufen auch in der CI) |
 | [`docs/`](docs/) | Anfänger-Dokumentation, **hier anfangen** |
