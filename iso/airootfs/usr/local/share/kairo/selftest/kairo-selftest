@@ -11,6 +11,13 @@
 
 stage_file=/var/log/kairo-selftest-stage
 marker=/etc/kairo-rollback-marker
+top=/run/kairo-selftest-top
+
+# Oberste Btrfs-Ebene (dort liegen @, @snapshots und die @kairo-alt-Sicherungen)
+mount_top() {
+    mkdir -p "${top}"
+    mount -o subvolid=5 "$(findmnt -no SOURCE / | sed 's/\[.*\]$//')" "${top}"
+}
 
 # GNOME braucht nach dem Start ein paar Sekunden
 for _ in $(seq 60); do
@@ -25,6 +32,12 @@ if [[ "$(cat "${stage_file}" 2>/dev/null)" == rollback ]]; then
         if [[ -e "${marker}" ]]; then echo "ROLLBACK_MARKER=da"; else echo "ROLLBACK_MARKER=weg"; fi
         echo "GDM=$(systemctl is-active gdm)"
         echo "ROOT=$(findmnt -no SOURCE /)"
+        # Aufräumen: Die älteste (eingeschleuste) Sicherung samt Subvolume darin
+        # muss weg sein, zwei bleiben
+        mount_top
+        echo "ALT_BACKUPS=$(find "${top}" -mindepth 1 -maxdepth 1 -name '@kairo-alt-*' | wc -l)"
+        echo "ALT_OLDEST=$(test -e "${top}/@kairo-alt-20000101-000000" && echo da || echo weg)"
+        umount "${top}"
         echo '===ROLLBACK_END'
     } > /dev/ttyS0 2>&1
     rm -f "${stage_file}"
@@ -74,6 +87,13 @@ fi
     echo "LOGO: $(find /usr/local/share/kairo/branding/ -maxdepth 1 -type f -printf '%f ')"
     grep -q 'kairo-start --autostart' /etc/xdg/autostart/kairo-start.desktop && echo "AUTOSTART=kairo-start"
     ls -1 /usr/local/share/applications/
+    # systemd legt auf Btrfs eigene Subvolumes in @ an, kairo-rollback muss damit umgehen
+    echo "NESTED_SUBVOLUMES: $(btrfs subvolume list -o / | awk '{print $NF}' | tr '\n' ' ')"
+    # Das, was "Kairo Update" als root ausführt (ohne die Passwortabfrage)
+    echo '===UPDATE_BEGIN'
+    /usr/local/bin/kairo-update-root
+    echo "UPDATE_ROOT_EXIT=$?"
+    echo '===UPDATE_END'
     # Ohne Protokoll lässt sich ein fehlgeschlagener erster Start nicht klären
     if [[ ! -e /var/lib/kairo/firstboot-done ]]; then
         echo '===FIRSTBOOT_LOG_BEGIN'
@@ -91,6 +111,14 @@ sleep 30
     echo '===ROLLBACK_TEST'
     num="$(snapper --no-dbus -c root create -d "Selbsttest vor Rollback" --print-number)"
     echo "SNAPSHOT=${num}"
+    # Zwei alte Sicherungen einschleusen, die älteste mit einem Subvolume darin
+    # (wie /var/lib/portables von systemd): kairo-rollback muss sie aufräumen
+    mount_top
+    for old in 20000101-000000 20000102-000000; do
+        btrfs subvolume create "${top}/@kairo-alt-${old}" >/dev/null
+    done
+    btrfs subvolume create "${top}/@kairo-alt-20000101-000000/verschachtelt" >/dev/null
+    umount "${top}"
     echo "Diese Datei muss nach dem Zurückrollen weg sein" > "${marker}"
     echo rollback > "${stage_file}"
     sync

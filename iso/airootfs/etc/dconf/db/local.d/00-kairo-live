@@ -15,6 +15,8 @@ button-layout='appmenu:minimize,maximize,close'
 # Live-System: kein Sperrbildschirm, kein Abschalten des Bildschirms
 [org/gnome/desktop/screensaver]
 lock-enabled=false
+picture-uri='file:///usr/local/share/kairo/branding/wallpaper.png'
+primary-color='#121514'
 
 [org/gnome/desktop/session]
 idle-delay=uint32 0
@@ -22,8 +24,4 @@ idle-delay=uint32 0
 [org/gnome/desktop/background]
 picture-uri='file:///usr/local/share/kairo/branding/wallpaper.png'
 picture-uri-dark='file:///usr/local/share/kairo/branding/wallpaper.png'
-primary-color='#121514'
-
-[org/gnome/desktop/screensaver]
-picture-uri='file:///usr/local/share/kairo/branding/wallpaper.png'
 primary-color='#121514'

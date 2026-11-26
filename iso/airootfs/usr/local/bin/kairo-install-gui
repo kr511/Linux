@@ -14,6 +14,9 @@ icon=kairo-logo
 w=480
 
 error() { zenity --error --title="${title}" --width="${w}" --text="$1"; }
+# Text für Auszeichnungen unschädlich machen (& < > aus Benutzereingaben)
+# (Ersatztext in Anführungszeichen: Seit Bash 5.2 steht ein nacktes & dort für den Fund)
+esc() { local t="${1//&/"&amp;"}"; t="${t//</"&lt;"}"; printf '%s' "${t//>/"&gt;"}"; }
 
 # Ablauf für Fehlermeldungen festhalten (nie Passwörter): /tmp/kairo-install-gui.log
 trace() { printf '%s %s\n' "$(date +%T)" "$*" >> /tmp/kairo-install-gui.log 2>/dev/null || true; }
@@ -71,11 +74,12 @@ while true; do
     user="$(zenity --entry --title="${title}" --width="${w}" \
         --text="Benutzername (nur Kleinbuchstaben, Ziffern, Binde- und Unterstrich), z. B. elias:")" || exit 0
     [[ "${user}" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "${user}" != root ]] && break
-    error "\"${user}\" geht nicht. Nur Kleinbuchstaben, Ziffern, - und _, am Anfang ein Buchstabe."
+    error "\"$(esc "${user}")\" geht nicht. Nur Kleinbuchstaben, Ziffern, - und _, am Anfang ein Buchstabe."
 done
 
-# Hinweis: zenity 4 zeigt bei --entry, --list und --forms keine Auszeichnungen
-# wie <b> an (sie stünden wörtlich da) und schluckt "_" als Tastenkürzel.
+# Hinweis: zenity 4 zeigt bei --entry keine Auszeichnungen wie <b> an (sie
+# stünden wörtlich da) und schluckt "_" als Tastenkürzel. --list, --forms und
+# Meldungen lesen Auszeichnungen, dort Eingaben des Benutzers mit esc() schützen.
 
 # ask_password <Text> <Mindestlänge>: Formular mit zwei Feldern
 ask_password() {
@@ -115,8 +119,10 @@ fi
 
 # --- Bestätigung --------------------------------------------------------------------
 
+summary="Zusammenfassung\n\nFestplatte: ${disk} ${model}\nSeriennummer: ${serial}\nBenutzer: ${user}\nVerschlüsselung: $([[ "${encrypt}" == 1 ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\nALLE DATEN AUF ${disk} WERDEN GELÖSCHT.\n\nZum Fortfahren LÖSCHEN eintippen:"
+# --entry: "__" zeigt ein "_" (Seriennummern und Namen wie eli_k), "_" allein verschwände
 answer="$(zenity --entry --title="${title}" --width=520 --ok-label="Installieren" \
-    --text="Zusammenfassung\n\nFestplatte: ${disk} ${model}\nSeriennummer: ${serial}\nBenutzer: ${user}\nVerschlüsselung: $([[ "${encrypt}" == 1 ]] && echo ja || echo nein)\nSnapshots vor jedem Update: ja\n\nALLE DATEN AUF ${disk} WERDEN GELÖSCHT.\n\nZum Fortfahren LÖSCHEN eintippen:")" || exit 0
+    --text="${summary//_/__}")" || exit 0
 if [[ "${answer}" != "LÖSCHEN" && "${answer}" != "LOESCHEN" ]]; then
     zenity --info --title="${title}" --width="${w}" --text="Abgebrochen, nichts wurde verändert."
     exit 0

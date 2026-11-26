@@ -602,6 +602,10 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
         ("Zurückrollen: Änderung nach dem Snapshot ist wieder weg",
          has(rollback, r"^ROLLBACK_MARKER=weg")),
         ("Nach dem Zurückrollen startet der Desktop", has(rollback, r"^GDM=active")),
+        # Älteste Sicherung enthielt ein Subvolume (wie /var/lib/portables)
+        ("Zurückrollen räumt alte Sicherungen auf, zwei bleiben",
+         has(rollback, r"^ALT_BACKUPS=2\s*$") and has(rollback, r"^ALT_OLDEST=weg\s*$")),
+        ("Kairo Update (als root) läuft durch", has(output, r"^UPDATE_ROOT_EXIT=0\s*$")),
         ("VM fährt nach dem Test sauber herunter", powered_off),
     ]
     return checks

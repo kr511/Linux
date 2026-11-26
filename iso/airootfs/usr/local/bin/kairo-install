@@ -39,7 +39,7 @@ mnt=/mnt
 min_gib=32
 crypt_name=kairo-root
 disk_guard=/usr/local/lib/kairo/disk_guard.py
-mounted="" opened_crypt=""
+mounted="" opened_crypt="" started=""
 # Btrfs: zstd-Kompression spart Platz und schont die SSD
 btrfs_opts=noatime,compress=zstd:1
 
@@ -75,15 +75,21 @@ if [[ "${1:-}" == --list-disks ]]; then
     exit 0
 fi
 
-# Bei Fehler: Festplatte wieder aushängen und Hinweis geben
-on_error() {
-    printf '\n%sDie Installation ist fehlgeschlagen.%s Die Meldung steht oben.\n' "${red}" "${off}" >&2
-    printf 'Protokoll: /tmp/kairo-install.log\n' >&2
+# Bei jedem Abbruch (Befehl schlägt fehl oder die()): Festplatte wieder
+# aushängen und Hinweis geben. Läuft über EXIT, weil die() mit "exit" endet
+# und eine ERR-Falle das nicht sieht: Dann blieb die Festplatte eingehängt.
+on_exit() {
+    local rc=$?
+    (( rc != 0 )) || return 0
+    if [[ -n "${started}" ]]; then
+        printf '\n%sDie Installation ist fehlgeschlagen.%s Die Meldung steht oben.\n' "${red}" "${off}" >&2
+        printf 'Protokoll: /tmp/kairo-install.log\n' >&2
+    fi
     if [[ -n "${mounted}" ]]; then umount -R "${mnt}" 2>/dev/null || true; fi
     if [[ -n "${opened_crypt}" ]]; then cryptsetup close "${crypt_name}" 2>/dev/null || true; fi
     if [[ -n "${KAIRO_SELFTEST:-}" ]]; then echo KAIRO_INSTALL_FAILED > /dev/ttyS0; fi
 }
-trap on_error ERR
+trap on_exit EXIT
 
 # Alles zusätzlich ins Protokoll schreiben
 exec > >(tee -a /tmp/kairo-install.log) 2>&1
@@ -129,10 +135,11 @@ else
     done
     while true; do
         read -rp "Nummer: " n
-        [[ "${n}" =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#disks[@]} )) && break
+        # 10#: "08" ist sonst eine (ungültige) Oktalzahl
+        [[ "${n}" =~ ^[0-9]{1,3}$ ]] && (( 10#${n} >= 1 && 10#${n} <= ${#disks[@]} )) && break
         echo "Bitte eine Nummer von 1 bis ${#disks[@]} eingeben."
     done
-    disk="${disks[$((n - 1))]}"
+    disk="${disks[$((10#${n} - 1))]}"
 fi
 IFS=$'\t' read -r _ size_gib disk_model disk_serial listed_identity \
     < <(printf '%s\n' "${disk_rows}" | awk -F '\t' -v d="${disk}" '$1 == d')
@@ -231,6 +238,7 @@ mountpoint -q "${mnt}" && die "${mnt} ist bereits eingehängt. Bitte erst prüfe
 # Letzte Prüfung direkt vor dem ersten destruktiven Befehl. Niemals belegte
 # Laufwerke automatisch aushängen, nur um diese Prüfung zu umgehen.
 python3 "${disk_guard}" verify "${disk}" "${disk_identity}" || die "Laufwerk fehlt, ist belegt oder wurde ausgetauscht."
+started=1
 wipefs --all --force "${disk}"
 sgdisk --zap-all "${disk}"
 # 8309 = Linux LUKS, 8304 = Linux-Root (x86-64)
@@ -456,7 +464,7 @@ progress 98
 sync
 umount -R "${mnt}"
 if [[ -n "${encrypt}" ]]; then cryptsetup close "${crypt_name}"; fi
-trap - ERR
+mounted="" opened_crypt=""
 progress 100
 if [[ -n "${KAIRO_SELFTEST:-}" ]]; then echo KAIRO_INSTALL_DONE > /dev/ttyS0; fi
 

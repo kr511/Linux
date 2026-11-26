@@ -28,7 +28,7 @@ case "$*" in
   *--forms*Verschlüsselung*) printf '%s\x1f%s\n' "$CRYPT_PW" "$CRYPT_PW" ;;
   *--forms*) printf 'pw1\x1fpw1\n' ;;
   *--entry*LÖSCHEN*) echo "$CONFIRM" ;;
-  *--entry*) echo "elias" ;;
+  *--entry*) echo "${NEW_USER:-elias}" ;;
   *"Festplatte verschlüsseln"*) [[ -n "$CRYPT_PW" ]] || exit 1 ;;
   *"Kairo ist installiert"*) exit 1 ;;
 esac
@@ -50,7 +50,8 @@ echo "==> Fertig"; echo "@@PROGRESS 100"
 
 class GuiInstallerTest(unittest.TestCase):
 
-    def run_gui(self, crypt_pw="", confirm="LÖSCHEN", cancel_crypt=False, empty_list=False):
+    def run_gui(self, crypt_pw="", confirm="LÖSCHEN", cancel_crypt=False, empty_list=False,
+                user="elias"):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             bindir, runtime = d / "bin", d / "run"
@@ -64,11 +65,21 @@ class GuiInstallerTest(unittest.TestCase):
                 path.chmod(path.stat().st_mode | stat.S_IXUSR)
             env = dict(os.environ, PATH=f"{bindir}:{os.environ['PATH']}", LOG=str(d / "log"),
                        XDG_RUNTIME_DIR=str(runtime), CRYPT_PW=crypt_pw, CONFIRM=confirm,
-                       CANCEL_CRYPT=str(int(cancel_crypt)), EMPTY_LIST=str(int(empty_list)))
+                       CANCEL_CRYPT=str(int(cancel_crypt)), EMPTY_LIST=str(int(empty_list)),
+                       NEW_USER=user)
             result = subprocess.run(["bash", str(GUI)], env=env, capture_output=True, text=True)
             log = (d / "log").read_text() if (d / "log").exists() else ""
             leftovers = list(runtime.iterdir())
         return result.returncode, log, leftovers
+
+    def test_unterstrich_bleibt_in_der_zusammenfassung_sichtbar(self):
+        # zenity --entry macht aus "_" ein Tastenkürzel, "__" zeigt ein "_"
+        code, log, _ = self.run_gui(user="eli_k")
+        self.assertEqual(code, 0)
+        summary = next(l for l in log.splitlines() if "LÖSCHEN eintippen" in l)
+        self.assertIn("Benutzer: eli__k", summary)
+        sudo = next(l for l in log.splitlines() if l.startswith("SUDO "))
+        self.assertIn("KAIRO_USER=eli_k ", sudo)
 
     def test_ohne_verschluesselung(self):
         code, log, leftovers = self.run_gui()
