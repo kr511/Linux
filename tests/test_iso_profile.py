@@ -237,7 +237,10 @@ class AssembledProfileTest(unittest.TestCase):
         self.assertEqual(name, "kairo")
         self.assertRegex(label, r"^KAIRO_\d{6}$")
         self.assertLessEqual(len(label), 32)
-        self.assertRegex(version, r"^1\.0\.1-\d{4}\.\d{2}\.\d{2}$")
+        # ISO-Version = Version aus os-release, sonst passt die ISO nicht zum Release
+        os_release = (ISO / "airootfs/usr/local/share/kairo/os-release").read_text()
+        version_id = re.search(r"^VERSION_ID=(\S+)$", os_release, re.MULTILINE).group(1)
+        self.assertRegex(version, rf"^{re.escape(version_id)}-\d{{4}}\.\d{{2}}\.\d{{2}}$")
         self.assertEqual(app, "Kairo OS Live")
 
     def test_bootmodi_von_releng_geerbt(self):
