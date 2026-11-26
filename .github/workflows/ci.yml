@@ -20,7 +20,7 @@ permissions:
 
 env:
   # Muss zu iso/base.conf (KAIRO_ARCHISO_VERSION) passen
-  ARCHISO_TAG: v91
+  ARCHISO_TAG: v92
 
 jobs:
   tests:

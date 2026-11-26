@@ -49,6 +49,12 @@ import time
 import zlib
 from pathlib import Path
 
+# Erwartete Version: aus os-release im Repo, damit ein neues Release nicht an
+# einer fest eingetragenen Nummer scheitert (Lauf 45755453859)
+_OS_RELEASE = (Path(__file__).resolve().parent.parent
+               / "iso/airootfs/usr/local/share/kairo/os-release").read_text()
+VERSION = re.search(r"^VERSION_ID=(\S+)$", _OS_RELEASE, re.MULTILINE).group(1)
+
 # UEFI-Firmware: Arch (edk2-ovmf) oder Debian/Ubuntu (ovmf)
 OVMF_CANDIDATES = [
     ("/usr/share/edk2/x64/OVMF_CODE.4m.fd", "/usr/share/edk2/x64/OVMF_VARS.4m.fd"),
@@ -501,12 +507,13 @@ def evaluate_live(output, boot, powered_off):
     checks = [
         ("Login als root, Hostname kairo (Prompt root@kairo)",
          has(output, r"^root\s*$") and has(output, r"^kairo\s*$")),
-        ('Begrüßung "Willkommen bei Kairo OS 1.0"', has(output, r"Willkommen bei Kairo OS 1\.0\.1")),
+        (f'Begrüßung "Willkommen bei Kairo OS {VERSION}"',
+         has(output, rf"Willkommen bei Kairo OS {re.escape(VERSION)}\b")),
         ('os-release: NAME="Kairo OS"', has(output, r'^NAME="Kairo OS"')),
         ("os-release: ID=kairo", has(output, r"^ID=\"?kairo\"?\s*$")),
         ("os-release: ID_LIKE=arch", has(output, r"^ID_LIKE=\"?arch\"?\s*$")),
-        ("os-release: IMAGE_VERSION=1.0-<datum>",
-         has(output, r"^IMAGE_VERSION=\"?1\.0\.1-\d{4}\.\d\d\.\d\d")),
+        (f"os-release: IMAGE_VERSION={VERSION}-<datum>",
+         has(output, rf"^IMAGE_VERSION=\"?{re.escape(VERSION)}-\d{{4}}\.\d\d\.\d\d")),
         ("hostnamectl: Static hostname: kairo", has(output, r"Static hostname: kairo\b")),
         ("hostnamectl: Operating System: Kairo OS", has(output, r"Operating System: Kairo OS")),
         # GitHub-Runner (Azure) lassen kein ICMP nach außen durch, ping bekommt
@@ -602,6 +609,10 @@ def evaluate_install(installed, output, rollback, powered_off, encrypt):
         ("Zurückrollen: Änderung nach dem Snapshot ist wieder weg",
          has(rollback, r"^ROLLBACK_MARKER=weg")),
         ("Nach dem Zurückrollen startet der Desktop", has(rollback, r"^GDM=active")),
+        # Älteste Sicherung enthielt ein Subvolume (wie /var/lib/portables)
+        ("Zurückrollen räumt alte Sicherungen auf, zwei bleiben",
+         has(rollback, r"^ALT_BACKUPS=2\s*$") and has(rollback, r"^ALT_OLDEST=weg\s*$")),
+        ("Kairo Update (als root) läuft durch", has(output, r"^UPDATE_ROOT_EXIT=0\s*$")),
         ("VM fährt nach dem Test sauber herunter", powered_off),
     ]
     return checks

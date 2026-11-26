@@ -8,7 +8,17 @@ set -uo pipefail
 title="Kairo Wiederherstellen"
 icon=kairo-logo
 
-mapfile -t rows < <(pkexec /usr/local/bin/kairo-rollback --list)
+# Passwortabfrage abgebrochen oder Fehler: nicht "keine Snapshots" behaupten.
+# pkexec: 126 = Abfrage weggeklickt, 127 = nicht berechtigt (das ist ein Fehler)
+list="$(pkexec /usr/local/bin/kairo-rollback --list 2>&1)"
+case $? in
+    0) ;;
+    126) exit 0 ;;
+    *) zenity --error --title="${title}" --width=480 --no-markup \
+           --text="Die Snapshots ließen sich nicht lesen: ${list}"
+       exit 1 ;;
+esac
+mapfile -t rows < <(printf '%s' "${list}" | sed '/^$/d')
 if (( ${#rows[@]} == 0 )); then
     zenity --info --title="${title}" --icon="${icon}" --width=380 \
         --text="Es gibt noch keine Snapshots. Sie entstehen automatisch bei jedem Update."

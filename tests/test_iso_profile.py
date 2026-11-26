@@ -237,7 +237,10 @@ class AssembledProfileTest(unittest.TestCase):
         self.assertEqual(name, "kairo")
         self.assertRegex(label, r"^KAIRO_\d{6}$")
         self.assertLessEqual(len(label), 32)
-        self.assertRegex(version, r"^1\.0\.1-\d{4}\.\d{2}\.\d{2}$")
+        # ISO-Version = Version aus os-release, sonst passt die ISO nicht zum Release
+        os_release = (ISO / "airootfs/usr/local/share/kairo/os-release").read_text()
+        version_id = re.search(r"^VERSION_ID=(\S+)$", os_release, re.MULTILINE).group(1)
+        self.assertRegex(version, rf"^{re.escape(version_id)}-\d{{4}}\.\d{{2}}\.\d{{2}}$")
         self.assertEqual(app, "Kairo OS Live")
 
     def test_bootmodi_von_releng_geerbt(self):
@@ -316,8 +319,37 @@ class RollbackPreflightTest(unittest.TestCase):
 
     def test_werkzeuge_werden_vor_dem_austausch_von_at_geprueft(self):
         check = self.SCRIPT.index('command -v "${tool}"')
-        first_change = self.SCRIPT.index('mv "${top}/@"')
+        first_change = self.SCRIPT.index('mv -T "${top}/@"')
         self.assertLess(check, first_change)
+
+    def test_ohne_snapshot_kommt_das_alte_at_zurueck(self):
+        snapshot = self.SCRIPT.index('if ! btrfs subvolume snapshot "${snap}" "${top}/@"')
+        undo = self.SCRIPT.index('mv -T "${top}/${backup}" "${top}/@"', snapshot)
+        self.assertLess(undo, self.SCRIPT.index("die ", undo))
+
+    def test_aufraeumen_erst_nach_dem_initramfs_und_ohne_abbruch(self):
+        # Lauf 45716751357 zeigte nur eine Sicherung; ab der dritten wird
+        # gelöscht, und @ enthält dann Subvolumes von systemd
+        initramfs = self.SCRIPT.index("mkinitcpio -p")
+        cleanup = self.SCRIPT.index('for o in "${old[@]:${keep_old}}"')
+        self.assertLess(initramfs, cleanup)
+        self.assertIn('delete_tree "${o}" ||', self.SCRIPT)
+        self.assertIn("btrfs subvolume list -o", self.SCRIPT)
+
+
+class InstallerCleanupTest(unittest.TestCase):
+    """Auch nach die() (exit) muss kairo-install die Festplatte wieder aushängen."""
+
+    SCRIPT = (ISO / "airootfs/usr/local/bin/kairo-install").read_text()
+
+    def test_aufraeumen_laeuft_bei_jedem_exit(self):
+        self.assertIn("trap on_exit EXIT", self.SCRIPT)
+        self.assertNotIn("trap on_error ERR", self.SCRIPT)
+
+    def test_erfolg_raeumt_nicht_auf(self):
+        done = self.SCRIPT.index("KAIRO_INSTALL_DONE")
+        reset = self.SCRIPT.index('mounted="" opened_crypt=""', self.SCRIPT.index('umount -R "${mnt}"\nif'))
+        self.assertLess(reset, done)
 
     def test_arch_chroot_ist_im_installierten_system(self):
         pkgs = read_package_list(ISO / "airootfs/usr/local/share/kairo/packages.target")

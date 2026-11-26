@@ -33,9 +33,11 @@ keep_old=2
 die()  { printf 'FEHLER: %s\n' "$*" >&2; exit 1; }
 info() { printf '==> %s\n' "$*"; }
 
+opened_crypt=""
 cleanup() {
     umount -R "${new}" 2>/dev/null || true
     umount "${top}" 2>/dev/null || true
+    if [[ -n "${opened_crypt}" ]]; then cryptsetup close "${crypt_name}" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -53,6 +55,7 @@ if [[ -d /run/archiso ]]; then
         if [[ ! -e "/dev/mapper/${crypt_name}" ]]; then
             info "Die Festplatte ist verschlüsselt."
             cryptsetup open "${part}" "${crypt_name}"
+            opened_crypt=1
         fi
         dev="/dev/mapper/${crypt_name}"
     else
@@ -135,17 +138,17 @@ for tool in arch-chroot btrfs; do
 done
 
 stamp="$(date +%Y%m%d-%H%M%S)"
-info "Sichere jetziges System als @kairo-alt-${stamp}"
-mv "${top}/@" "${top}/@kairo-alt-${stamp}"
+backup="@kairo-alt-${stamp}"
+[[ ! -e "${top}/${backup}" ]] || die "${backup} gibt es schon, bitte eine Sekunde warten und nochmal. Nichts wurde verändert."
+info "Sichere jetziges System als ${backup}"
+# -T: nie in ein vorhandenes Verzeichnis hinein verschieben
+mv -T "${top}/@" "${top}/${backup}"
 info "Stelle Snapshot ${num} wieder her"
-btrfs subvolume snapshot "${snap}" "${top}/@"
-
-# Ältere Sicherungen aufräumen, die neuesten ${keep_old} bleiben
-mapfile -t old < <(find "${top}" -maxdepth 1 -name '@kairo-alt-*' -printf '%f\n' | sort -r)
-for o in "${old[@]:${keep_old}}"; do
-    info "Lösche alte Sicherung ${o}"
-    btrfs subvolume delete "${top}/${o}" >/dev/null
-done
+if ! btrfs subvolume snapshot "${snap}" "${top}/@"; then
+    # Ohne @ startet Kairo nicht mehr: den alten Stand zurücklegen
+    mv -T "${top}/${backup}" "${top}/@"
+    die "Snapshot ${num} ließ sich nicht wiederherstellen. Das System ist unverändert."
+fi
 
 # --- Kernel und Initramfs passend zum Snapshot ------------------------------------
 
@@ -161,6 +164,34 @@ for pkgbase in "${new}"/usr/lib/modules/*/pkgbase; do
     kernel="$(<"${pkgbase}")"
     install -m 0644 "$(dirname "${pkgbase}")/vmlinuz" "${new}/boot/vmlinuz-${kernel}"
     arch-chroot "${new}" mkinitcpio -p "${kernel}"
+done
+
+# --- Alte Sicherungen aufräumen ------------------------------------------------------
+
+# Erst ganz am Ende und ohne Abbruch: Das Zurückrollen selbst ist hier schon
+# fertig, ein Fehler beim Aufräumen darf daran nichts mehr ändern.
+# systemd legt in @ eigene Subvolumes an (/var/lib/portables, /var/lib/machines).
+# Ein Subvolume mit Subvolumes darin lässt sich nicht löschen, also von innen
+# nach außen löschen. "list -o" zeigt Pfade relativ zur obersten Ebene.
+delete_tree() {
+    local nested
+    btrfs subvolume list -o "${top}/$1" | sed -n 's/^ID [0-9]* gen [0-9]* top level [0-9]* path //p' \
+        | awk '{ print length($0) "\t" $0 }' | sort -rn | cut -f2- \
+        | while IFS= read -r nested; do
+            btrfs subvolume delete "${top}/${nested}" >/dev/null
+        done
+    btrfs subvolume delete "${top}/$1" >/dev/null
+}
+# Nie das gerade laufende System löschen (zweimal zurückgerollt ohne Neustart)
+running_id=""
+if [[ -z "${live}" ]]; then running_id="$(btrfs inspect-internal rootid / 2>/dev/null || true)"; fi
+mapfile -t old < <(find "${top}" -mindepth 1 -maxdepth 1 -name '@kairo-alt-*' -printf '%f\n' | sort -r)
+for o in "${old[@]:${keep_old}}"; do
+    if [[ -n "${running_id}" && "$(btrfs inspect-internal rootid "${top}/${o}" 2>/dev/null)" == "${running_id}" ]]; then
+        continue
+    fi
+    info "Lösche alte Sicherung ${o}"
+    delete_tree "${o}" || printf 'Hinweis: %s ließ sich nicht löschen, das Zurücksetzen hat trotzdem geklappt.\n' "${o}" >&2
 done
 
 sync

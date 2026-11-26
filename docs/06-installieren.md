@@ -103,7 +103,7 @@ Beim Einschalten des PCs die Setup-Taste drücken (meist `Entf`, `F2` oder `F12`
    (oder drücke `Esc`), damit es groß im Vordergrund steht. Klicke zuerst auf
    **Hardware prüfen**: Es zeigt, ob Grafik (AMD-Treiber), WLAN, Ton,
    Internet und Festplatte passen. Bei ❌ erst das Problem lösen.
-   Beides ("Hardware prüfen", "Kairo installieren") ist auch im Dock links.
+   Beides ("Hardware prüfen", "Kairo installieren") ist auch in der App-Leiste unten in der Übersicht.
 3. Für WLAN: oben rechts auf das Netzwerk-Symbol klicken. LAN geht von selbst.
 4. Der Installer führt dich durch ein paar Fenster:
    - Festplatte auswählen (die Liste zeigt Größe, Modell und Seriennummer;
